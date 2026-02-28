@@ -1,20 +1,18 @@
 #!/bin/bash
 # Demo Sophie — Playwright live dans un vrai navigateur
 # Usage: ./scripts/demo_sophie.sh
-#
-# Prérequis: frontend sur localhost:5173 (cd frontend && npm run dev)
 
 set -e
 cd "$(dirname "$0")/.."
 
-# Helper: refresh snapshot + fill + click send
+# Helper: refresh snapshot + fill input + click send using element refs
 send_message() {
   local msg="$1"
   npx playwright-cli snapshot > /dev/null 2>&1
-  npx playwright-cli fill 'textbox "Votre message"' "$msg"
+  npx playwright-cli fill e17 "$msg"
   sleep 0.5
   npx playwright-cli snapshot > /dev/null 2>&1
-  npx playwright-cli click 'button "Envoyer"'
+  npx playwright-cli click e19
 }
 
 echo "============================================================"
@@ -34,7 +32,6 @@ BACKEND_PID=$!
 sleep 3
 echo "Backend lancé"
 
-# Vérifier frontend
 if ! lsof -ti:5173 > /dev/null 2>&1; then
   echo "ERREUR: Lance le frontend d'abord: cd frontend && npm run dev"
   kill $BACKEND_PID
@@ -43,11 +40,9 @@ fi
 echo "Frontend OK"
 echo ""
 
-# Ouvrir Chrome via playwright-cli (visible)
 echo "Ouverture du navigateur..."
 npx playwright-cli open http://sophie.localhost:5173 --browser chrome --headed
 
-# Turn 1: attendre la réponse init
 echo ""
 echo "Turn 1 — Agent initie la conversation"
 echo "  Attente de la réponse SSE..."
@@ -57,7 +52,6 @@ echo ""
 echo ">>> Appuie sur Entrée pour Turn 2 (choix Andy)"
 read
 
-# Turn 2: Andy
 echo "Turn 2 — Sophie choisit Andy"
 send_message "Andy, ça me va !"
 echo "  Attente réponse..."
@@ -67,7 +61,6 @@ echo ""
 echo ">>> Appuie sur Entrée pour Turn 3 (prénom)"
 read
 
-# Turn 3: Prénom
 echo "Turn 3 — Sophie se présente"
 send_message "Moi c'est Sophie"
 echo "  Attente réponse..."
@@ -77,7 +70,6 @@ echo ""
 echo ">>> Appuie sur Entrée pour Turn 4 (situation)"
 read
 
-# Turn 4: Situation détaillée
 echo "Turn 4 — Sophie raconte sa situation"
 send_message "Je suis designer graphique et web. J'ai bossé 3 ans en agence et j'ai commencé à prendre des clients en freelance à côté. J'en ai 4-5 réguliers mais j'aimerais vraiment me lancer à plein temps. Le truc c'est que tout ce qui est administratif, compta, devis, factures... j'y connais absolument rien et ça me stresse énormément."
 echo "  Attente réponse..."
@@ -87,7 +79,6 @@ echo ""
 echo ">>> Appuie sur Entrée pour Turn 5 (besoins — final)"
 read
 
-# Turn 5: Besoins précis
 echo "Turn 5 — Sophie précise ses besoins (tour final)"
 send_message "Honnêtement les deux mais surtout la gestion. J'ai des clients qui me paient en retard, je sais pas comment faire des relances, j'ai aucun outil pour suivre mes factures et j'ai même pas de statut officiel encore. J'utilise un tableur Excel et je perds tout."
 echo "  Attente réponse (profiler + recherche)..."
@@ -99,7 +90,7 @@ echo "============================================================"
 echo " SCÉNARIO SOPHIE TERMINÉ"
 echo "============================================================"
 echo ""
-echo "Appuie sur Entrée pour fermer le navigateur..."
+echo "Appuie sur Entrée pour fermer..."
 read
 
 npx playwright-cli close
