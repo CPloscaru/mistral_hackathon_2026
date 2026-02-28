@@ -77,9 +77,9 @@ def create_onboarding_swarm() -> Swarm:
     profiler = Agent(
         name="profiler",
         model=MistralModel(
-            model_id=MODEL_8B,
+            model_id=MODEL_14B,
             api_key=MISTRAL_API,
-            max_tokens=4096,
+            max_tokens=8192,
         ),
         system_prompt=ONBOARDING_PROFILER_PROMPT,
         callback_handler=_swarm_debug_callback,

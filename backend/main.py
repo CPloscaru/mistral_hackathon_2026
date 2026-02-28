@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.middleware.subdomain import SubdomainMiddleware
 from backend.routes.chat import router as chat_router
 from backend.routes.chat_stream import router as stream_router
+from backend.routes.tools import router as tools_router
 
 app = FastAPI(
     title="Kameleon",
@@ -41,6 +42,7 @@ app.add_middleware(SubdomainMiddleware)
 
 app.include_router(chat_router)
 app.include_router(stream_router)
+app.include_router(tools_router)
 
 
 @app.get("/health")

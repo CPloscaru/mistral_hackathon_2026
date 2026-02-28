@@ -1,0 +1,815 @@
+/* ─── Dock macOS horizontal (bottom) ─── */
+
+.dock {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 0.75rem 2.5rem;
+  z-index: 100;
+  background: rgba(15, 15, 20, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(124, 58, 237, 0.15);
+  border-radius: 16px 16px 0 0;
+}
+
+.dock__item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.75rem 1rem;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  opacity: 0;
+  transform: translateY(40px);
+}
+
+.dock__item--visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.dock__item:hover {
+  background: rgba(124, 58, 237, 0.12);
+  transform: translateY(0) scale(1.12);
+}
+
+.dock__item--active {
+  background: rgba(124, 58, 237, 0.2);
+  box-shadow: 0 0 20px rgba(124, 58, 237, 0.3);
+}
+
+.dock__icon {
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.8rem;
+  border-radius: 14px;
+  background: rgba(124, 58, 237, 0.1);
+  border: 1px solid rgba(124, 58, 237, 0.2);
+  transition: all 0.25s ease;
+}
+
+.dock__item:hover .dock__icon {
+  background: rgba(124, 58, 237, 0.2);
+  border-color: rgba(124, 58, 237, 0.4);
+}
+
+.dock__item--active .dock__icon {
+  background: rgba(124, 58, 237, 0.3);
+  border-color: #7C3AED;
+  box-shadow: 0 0 12px rgba(124, 58, 237, 0.4);
+}
+
+.dock__label {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  text-align: center;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  transition: color 0.2s ease;
+}
+
+.dock__item:hover .dock__label {
+  color: #c4b5fd;
+}
+
+.dock__item--active .dock__label {
+  color: #a78bfa;
+  font-weight: 600;
+}
+
+/* Tooltip on hover */
+.dock__item::before {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%) scale(0.9);
+  background: rgba(15, 15, 20, 0.95);
+  color: #e2e0f0;
+  padding: 0.4rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: all 0.2s ease;
+  border: 1px solid rgba(124, 58, 237, 0.2);
+}
+
+.dock__item:hover::before {
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
+}
+
+/* ─── Tool Panel (full-screen overlay left of dock) ─── */
+
+.tool-panel-overlay {
+  position: fixed;
+  top: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(1100px, calc(100vw - 4rem));
+  bottom: calc(var(--dock-height, 80px) + 1.5rem); /* above dock with gap */
+  z-index: 90;
+  background: rgba(15, 15, 20, 0.82);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  border: 1px solid rgba(124, 58, 237, 0.18);
+  border-radius: 20px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: toolPanelSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(124, 58, 237, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(124, 58, 237, 0.25) transparent;
+}
+
+/* Custom scrollbar — Webkit (Chrome/Safari) */
+.tool-panel-overlay::-webkit-scrollbar {
+  width: 6px;
+}
+
+.tool-panel-overlay::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 16px 0;
+}
+
+.tool-panel-overlay::-webkit-scrollbar-thumb {
+  background: rgba(124, 58, 237, 0.25);
+  border-radius: 3px;
+  transition: background 0.2s ease;
+}
+
+.tool-panel-overlay::-webkit-scrollbar-thumb:hover {
+  background: rgba(124, 58, 237, 0.45);
+}
+
+.tool-panel-overlay--closing {
+  animation: toolPanelSlideOut 0.25s ease-in forwards;
+}
+
+@keyframes toolPanelSlideIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+@keyframes toolPanelSlideOut {
+  from { opacity: 1; transform: translateX(-50%) translateY(0); }
+  to { opacity: 0; transform: translateX(-50%) translateY(20px); }
+}
+
+.tool-panel {
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.tool-panel__content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(124, 58, 237, 0.25) transparent;
+}
+
+.tool-panel__content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.tool-panel__content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tool-panel__content::-webkit-scrollbar-thumb {
+  background: rgba(124, 58, 237, 0.25);
+  border-radius: 3px;
+}
+
+.tool-panel__content::-webkit-scrollbar-thumb:hover {
+  background: rgba(124, 58, 237, 0.45);
+}
+
+.tool-panel__header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: -1.25rem -1.5rem 1rem;
+  padding: 1rem 1.5rem;
+  background: rgba(15, 15, 20, 0.9);
+  border-bottom: 1px solid rgba(124, 58, 237, 0.12);
+  border-radius: 20px 20px 0 0;
+}
+
+.tool-panel__title {
+  font-size: 1.35rem;
+  font-weight: 600;
+  color: #e2e0f0;
+  letter-spacing: -0.01em;
+}
+
+.tool-panel__close {
+  background: rgba(124, 58, 237, 0.06);
+  border: 1px solid rgba(124, 58, 237, 0.15);
+  color: #64748b;
+  cursor: pointer;
+  padding: 0;
+  border-radius: 10px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+}
+
+.tool-panel__close:hover {
+  color: #e2e0f0;
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+/* ─── Admin Checklist Tool ─── */
+
+.admin-tool__progress {
+  margin-bottom: 1.5rem;
+}
+
+.admin-tool__progress-bar {
+  width: 100%;
+  height: 6px;
+  background: rgba(124, 58, 237, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 0.5rem;
+}
+
+.admin-tool__progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #7C3AED, #a78bfa);
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+
+.admin-tool__progress-label {
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+.admin-tool__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-left: 3px solid rgba(124, 58, 237, 0.3);
+  background: rgba(124, 58, 237, 0.04);
+  border-radius: 0 10px 10px 0;
+  margin-bottom: 0.75rem;
+  transition: all 0.2s ease;
+}
+
+.admin-tool__item:hover {
+  background: rgba(124, 58, 237, 0.08);
+  border-left-color: #7C3AED;
+}
+
+.admin-tool__item--done {
+  opacity: 0.5;
+  border-left-color: rgba(34, 197, 94, 0.4);
+}
+
+.admin-tool__checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  border: 2px solid rgba(124, 58, 237, 0.4);
+  border-radius: 5px;
+  cursor: pointer;
+  position: relative;
+  margin-top: 2px;
+  transition: all 0.2s ease;
+  background: transparent;
+}
+
+.admin-tool__checkbox:checked {
+  background: #7C3AED;
+  border-color: #7C3AED;
+}
+
+.admin-tool__checkbox:checked::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 6px;
+  width: 5px;
+  height: 9px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.admin-tool__content {
+  flex: 1;
+}
+
+.admin-tool__label {
+  font-size: 0.95rem;
+  color: #e2e0f0;
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+}
+
+.admin-tool__item--done .admin-tool__label {
+  text-decoration: line-through;
+  color: #64748b;
+}
+
+.admin-tool__description {
+  font-size: 0.8rem;
+  color: #64748b;
+  margin-bottom: 0.3rem;
+}
+
+.admin-tool__link {
+  font-size: 0.75rem;
+  color: #a78bfa;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  transition: color 0.2s ease;
+}
+
+.admin-tool__link:hover {
+  color: #c4b5fd;
+  text-decoration: underline;
+}
+
+/* ─── Calendar Tool ─── */
+
+.calendar-tool__controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  flex-shrink: 0;
+}
+
+.calendar-tool__nav {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.calendar-tool__nav-btn {
+  background: none;
+  border: 1px solid rgba(124, 58, 237, 0.2);
+  color: #94a3b8;
+  padding: 0.45rem 0.75rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all 0.2s ease;
+}
+
+.calendar-tool__nav-btn:hover {
+  color: #e2e0f0;
+  border-color: rgba(124, 58, 237, 0.4);
+  background: rgba(124, 58, 237, 0.1);
+}
+
+.calendar-tool__month-label {
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: #e2e0f0;
+  min-width: 220px;
+  text-align: center;
+}
+
+.calendar-tool__view-toggle {
+  display: flex;
+  gap: 0.25rem;
+  background: rgba(124, 58, 237, 0.08);
+  padding: 0.2rem;
+  border-radius: 8px;
+}
+
+.calendar-tool__view-btn {
+  background: none;
+  border: none;
+  color: #64748b;
+  padding: 0.45rem 0.9rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+}
+
+.calendar-tool__view-btn--active {
+  background: rgba(124, 58, 237, 0.2);
+  color: #a78bfa;
+}
+
+/* Monthly grid */
+.calendar-tool__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  grid-template-rows: auto repeat(6, 1fr);
+  gap: 1px;
+  background: rgba(124, 58, 237, 0.05);
+  border-radius: 10px;
+  overflow: hidden;
+  flex: 1;
+  min-height: 0;
+}
+
+.calendar-tool__weekday {
+  padding: 0.75rem;
+  text-align: center;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: rgba(15, 15, 20, 0.8);
+}
+
+.calendar-tool__day {
+  padding: 0.5rem;
+  background: rgba(15, 15, 20, 0.6);
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.calendar-tool__day--other-month {
+  opacity: 0.3;
+}
+
+.calendar-tool__day--today {
+  background: rgba(124, 58, 237, 0.08);
+}
+
+.calendar-tool__day-number {
+  font-size: 0.9rem;
+  color: #94a3b8;
+  margin-bottom: 0.25rem;
+  font-weight: 500;
+}
+
+.calendar-tool__events-container {
+  position: relative;
+}
+
+.calendar-tool__day--today .calendar-tool__day-number {
+  color: #a78bfa;
+  font-weight: 700;
+}
+
+.calendar-tool__event {
+  font-size: 0.85rem;
+  line-height: 1.35;
+  padding: 0.25rem 0.4rem;
+  border-radius: 4px;
+  margin-bottom: 2px;
+  cursor: pointer;
+  word-break: break-word;
+  transition: filter 0.15s ease;
+}
+
+.calendar-tool__event:hover {
+  filter: brightness(1.3);
+}
+
+.calendar-tool__event--action {
+  background: rgba(124, 58, 237, 0.2);
+  color: #c4b5fd;
+}
+
+.calendar-tool__event--rappel {
+  background: rgba(251, 146, 60, 0.2);
+  color: #fbbf24;
+}
+
+.calendar-tool__event--deadline {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+}
+
+/* Event popover */
+.calendar-tool__popover {
+  position: fixed;
+  z-index: 200;
+  background: rgba(15, 15, 20, 0.98);
+  border: 1px solid rgba(124, 58, 237, 0.3);
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  max-width: 280px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+  animation: fadeIn 0.15s ease;
+}
+
+.calendar-tool__popover-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #e2e0f0;
+  margin-bottom: 0.3rem;
+}
+
+.calendar-tool__popover-date {
+  font-size: 0.7rem;
+  color: #64748b;
+  margin-bottom: 0.4rem;
+}
+
+.calendar-tool__popover-desc {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+
+/* Annual view */
+.calendar-tool__annual {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+}
+
+.calendar-tool__mini-month {
+  background: rgba(15, 15, 20, 0.4);
+  border-radius: 8px;
+  padding: 0.6rem;
+}
+
+.calendar-tool__mini-month-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #94a3b8;
+  margin-bottom: 0.4rem;
+  text-align: center;
+}
+
+.calendar-tool__mini-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+}
+
+.calendar-tool__mini-day {
+  width: 100%;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.55rem;
+  color: #475569;
+  position: relative;
+}
+
+.calendar-tool__mini-day--has-event {
+  cursor: pointer;
+}
+
+.calendar-tool__mini-dot {
+  position: absolute;
+  bottom: 0;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+}
+
+.calendar-tool__mini-dot--action {
+  background: #7C3AED;
+}
+
+.calendar-tool__mini-dot--rappel {
+  background: #fb923c;
+}
+
+.calendar-tool__mini-dot--deadline {
+  background: #ef4444;
+}
+
+/* ─── CRM Tool ─── */
+
+.crm-tool__stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.crm-tool__stat {
+  background: rgba(124, 58, 237, 0.06);
+  border: 1px solid rgba(124, 58, 237, 0.12);
+  border-radius: 10px;
+  padding: 1rem;
+  text-align: center;
+}
+
+.crm-tool__stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #a78bfa;
+}
+
+.crm-tool__stat-label {
+  font-size: 0.75rem;
+  color: #64748b;
+  margin-top: 0.2rem;
+}
+
+/* Drop zone */
+.crm-tool__dropzone {
+  border: 2px dashed rgba(124, 58, 237, 0.3);
+  border-radius: 12px;
+  padding: 2rem;
+  text-align: center;
+  margin-bottom: 2rem;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.crm-tool__dropzone:hover,
+.crm-tool__dropzone--active {
+  border-color: #7C3AED;
+  background: rgba(124, 58, 237, 0.06);
+}
+
+.crm-tool__dropzone-icon {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.crm-tool__dropzone-text {
+  font-size: 0.9rem;
+  color: #94a3b8;
+}
+
+.crm-tool__dropzone-hint {
+  font-size: 0.75rem;
+  color: #475569;
+  margin-top: 0.3rem;
+}
+
+/* Spinner for import */
+.crm-tool__importing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  color: #a78bfa;
+  font-size: 0.9rem;
+}
+
+.crm-tool__importing-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(124, 58, 237, 0.2);
+  border-top-color: #7C3AED;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Section headers */
+.crm-tool__section-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #e2e0f0;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(124, 58, 237, 0.1);
+}
+
+/* Client cards */
+.crm-tool__clients {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 2rem;
+}
+
+.crm-tool__client-card {
+  background: rgba(124, 58, 237, 0.04);
+  border: 1px solid rgba(124, 58, 237, 0.1);
+  border-radius: 10px;
+  padding: 1rem;
+  transition: all 0.2s ease;
+}
+
+.crm-tool__client-card:hover {
+  border-color: rgba(124, 58, 237, 0.3);
+  background: rgba(124, 58, 237, 0.08);
+}
+
+.crm-tool__client-name {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #e2e0f0;
+  margin-bottom: 0.3rem;
+}
+
+.crm-tool__client-email {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.crm-tool__client-secteur {
+  font-size: 0.7rem;
+  color: #7C3AED;
+  margin-top: 0.3rem;
+}
+
+.crm-tool__client-factures-count {
+  font-size: 0.7rem;
+  color: #475569;
+  margin-top: 0.25rem;
+}
+
+/* Factures table */
+.crm-tool__factures-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.crm-tool__factures-table th {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid rgba(124, 58, 237, 0.1);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.crm-tool__factures-table td {
+  font-size: 0.85rem;
+  color: #cbd5e1;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid rgba(124, 58, 237, 0.05);
+}
+
+.crm-tool__factures-table tr:hover td {
+  background: rgba(124, 58, 237, 0.04);
+}
+
+/* Statut badges */
+.crm-tool__badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 20px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.crm-tool__badge--payee {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+}
+
+.crm-tool__badge--en_attente {
+  background: rgba(251, 146, 60, 0.15);
+  color: #fb923c;
+}
+
+.crm-tool__badge--en_retard {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+/* Empty state */
+.crm-tool__empty {
+  text-align: center;
+  padding: 2rem;
+  color: #475569;
+  font-size: 0.85rem;
+}

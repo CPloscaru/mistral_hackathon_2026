@@ -150,6 +150,17 @@ async def _stream_swarm(swarm, message: str, session: dict):
                     session_id=session_id,
                     plan_data=plan_data,
                 )
+
+                # Persister tools_data si présent
+                tools_data = plan_data.get("tools_data")
+                if tools_data:
+                    if tools_data.get("admin_checklist"):
+                        db.save_admin_checklist(session_id, tools_data["admin_checklist"])
+                        logger.info("Persisted %d admin checklist items", len(tools_data["admin_checklist"]))
+                    if tools_data.get("calendar_events"):
+                        db.save_calendar_events(session_id, tools_data["calendar_events"])
+                        logger.info("Persisted %d calendar events", len(tools_data["calendar_events"]))
+
                 yield {
                     "data": json.dumps(plan_data, ensure_ascii=False),
                     "event": "plan_ready",
@@ -211,7 +222,10 @@ async def _event_generator(session: dict, message: str):
                 # Lancé depuis /personal-assistant → exécuter le Swarm
                 session = session_manager.swap_to_swarm(session_id)
                 swarm = session["agent"]
-                profile_msg = json.dumps(session["onboarding_data"], ensure_ascii=False)
+                from datetime import date
+                profile_data = dict(session["onboarding_data"])
+                profile_data["date_du_jour"] = date.today().isoformat()
+                profile_msg = json.dumps(profile_data, ensure_ascii=False)
                 async for sse_event in _stream_swarm(swarm, profile_msg, session):
                     yield sse_event
                 return
@@ -372,11 +386,13 @@ async def session_info(request: Request, session_id: str):
         return {"error": "Session introuvable"}
 
     onboarding_data = record.get("onboarding_data") or {}
+    plan_data = onboarding_data.pop("_plan", None)
     return {
         "prenom": onboarding_data.get("prenom"),
         "assistant_name": record.get("assistant_name"),
         "persona": record.get("persona"),
         "maturity_level": record.get("maturity_level"),
+        "plan": plan_data,
     }
 
 

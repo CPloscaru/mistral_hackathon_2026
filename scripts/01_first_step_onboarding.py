@@ -93,7 +93,7 @@ def get_last_assistant_message() -> str:
     """Lit le textContent du dernier message assistant dans le DOM."""
     # pw_eval wraps as () => (<expr>), so use comma operator for multi-step
     return pw_eval(
-        "[...document.querySelectorAll('.message-bubble--assistant')].pop()?.textContent || ''"
+        "[...document.querySelectorAll('.message-bubble--assistant')].pop()?.innerText || ''"
     ).strip()
 
 

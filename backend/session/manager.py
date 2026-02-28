@@ -177,6 +177,10 @@ class SessionManager:
             session["onboarding_data"] = onboarding_data
         if plan_data is not None:
             session["plan_data"] = plan_data
+            # Persister le plan dans onboarding_data pour survie au restart
+            ob = session.get("onboarding_data") or {}
+            ob["_plan"] = plan_data
+            session["onboarding_data"] = ob
 
         # Persistance SQLite
         db.save_session(
