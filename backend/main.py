@@ -2,7 +2,12 @@
 Point d'entrée de l'application Kameleon.
 Lance le serveur FastAPI avec les routes et middlewares configurés.
 """
-from fastapi import FastAPI
+import uvicorn
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+
+from backend.middleware.subdomain import SubdomainMiddleware
+from backend.routes.chat import router as chat_router
 
 app = FastAPI(
     title="Kameleon",
@@ -10,8 +15,37 @@ app = FastAPI(
     version="0.1.0",
 )
 
+# --- Middlewares ---
+
+# CORS permissif en développement (toutes origines autorisées)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Résolution de la persona depuis le sous-domaine Host
+app.add_middleware(SubdomainMiddleware)
+
+# --- Routes ---
+
+app.include_router(chat_router)
+
 
 @app.get("/health")
-async def health_check():
-    """Endpoint de santé pour vérifier que l'API est opérationnelle."""
-    return {"status": "ok", "service": "kameleon"}
+async def health_check(request: Request):
+    """
+    Endpoint de santé — vérifie que l'API est opérationnelle.
+    Retourne également la persona résolue depuis le sous-domaine.
+    """
+    return {
+        "status": "ok",
+        "service": "kameleon",
+        "persona": request.state.persona,
+    }
+
+
+if __name__ == "__main__":
+    uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, reload=True)
