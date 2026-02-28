@@ -154,7 +154,13 @@ body {
 .message-row {
   display: flex;
   width: 100%;
-  animation: fadeIn 0.2s ease forwards;
+  animation: fadeIn 0.15s ease forwards;
+}
+
+/* No animation on streaming messages — they grow naturally token by token */
+.message-row:has(.message-bubble--streaming) {
+  animation: none;
+  opacity: 1;
 }
 
 .message-row--user {
