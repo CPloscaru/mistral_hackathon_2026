@@ -274,7 +274,8 @@ class TestChatStreamEndpoint:
                 mock_sm.update_session_state = MagicMock()
 
                 async with httpx.AsyncClient(
-                    app=app_client, base_url="http://sophie.localhost:8000"
+                    transport=httpx.ASGITransport(app=app_client),
+                    base_url="http://sophie.localhost:8000",
                 ) as client:
                     response = await client.post(
                         "/chat/stream",
@@ -306,7 +307,8 @@ class TestChatStreamEndpoint:
             mock_sm.update_session_state = MagicMock()
 
             async with httpx.AsyncClient(
-                app=app_client, base_url="http://sophie.localhost:8000"
+                transport=httpx.ASGITransport(app=app_client),
+                base_url="http://sophie.localhost:8000",
             ) as client:
                 response = await client.post(
                     "/chat/stream",
@@ -338,7 +340,8 @@ class TestChatStreamEndpoint:
             mock_sm.update_session_state = MagicMock()
 
             async with httpx.AsyncClient(
-                app=app_client, base_url="http://sophie.localhost:8000"
+                transport=httpx.ASGITransport(app=app_client),
+                base_url="http://sophie.localhost:8000",
             ) as client:
                 response = await client.post(
                     "/chat/stream",
@@ -372,7 +375,8 @@ class TestChatStreamEndpoint:
             mock_sm.update_session_state = MagicMock()
 
             async with httpx.AsyncClient(
-                app=app_client, base_url="http://sophie.localhost:8000"
+                transport=httpx.ASGITransport(app=app_client),
+                base_url="http://sophie.localhost:8000",
             ) as client:
                 response = await client.post(
                     "/chat/stream",
@@ -412,7 +416,8 @@ class TestChatStreamEndpoint:
             mock_sm.update_session_state = MagicMock()
 
             async with httpx.AsyncClient(
-                app=app_client, base_url="http://sophie.localhost:8000"
+                transport=httpx.ASGITransport(app=app_client),
+                base_url="http://sophie.localhost:8000",
             ) as client:
                 response = await client.post(
                     "/chat/stream",
@@ -450,7 +455,8 @@ class TestChatInitEndpoint:
             mock_sm.update_session_state = MagicMock()
 
             async with httpx.AsyncClient(
-                app=app_client, base_url="http://sophie.localhost:8000"
+                transport=httpx.ASGITransport(app=app_client),
+                base_url="http://sophie.localhost:8000",
             ) as client:
                 response = await client.get(
                     "/chat/init",
@@ -483,7 +489,8 @@ class TestChatInitEndpoint:
             mock_sm.update_session_state = MagicMock()
 
             async with httpx.AsyncClient(
-                app=app_client, base_url="http://lea.localhost:8000"
+                transport=httpx.ASGITransport(app=app_client),
+                base_url="http://lea.localhost:8000",
             ) as client:
                 response = await client.get(
                     "/chat/init",
@@ -525,7 +532,8 @@ class TestMaturitySentinel:
             mock_sm.update_session_state = MagicMock()
 
             async with httpx.AsyncClient(
-                app=app_client, base_url="http://sophie.localhost:8000"
+                transport=httpx.ASGITransport(app=app_client),
+                base_url="http://sophie.localhost:8000",
             ) as client:
                 response = await client.post(
                     "/chat/stream",
@@ -566,7 +574,8 @@ class TestMaturitySentinel:
             mock_sm.update_session_state = MagicMock()
 
             async with httpx.AsyncClient(
-                app=app_client, base_url="http://sophie.localhost:8000"
+                transport=httpx.ASGITransport(app=app_client),
+                base_url="http://sophie.localhost:8000",
             ) as client:
                 await client.post(
                     "/chat/stream",

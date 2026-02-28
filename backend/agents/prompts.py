@@ -153,11 +153,28 @@ def build_system_prompt(agent_name: str, persona: str, seed_data: dict) -> str:
     return "\n".join(sections)
 
 
+ONBOARDING_INSTRUCTIONS_CREATOR = """
+=== MODE ONBOARDING — PERSONA CRÉATEUR ===
+
+Si tu reçois le message "__INIT__" et que l'utilisateur est un créateur (persona=creator), tu envoies TOI-MEME un message d'accueil chaleureux. Tu ne délègues PAS.
+Ton premier message doit accueillir l'utilisateur et lui demander : "Comment veux-tu m'appeler ? Andy ou Lisa ?"
+
+MODE ONBOARDING (maturity_level=1, persona=creator) :
+- Tu poses des questions conversationnelles pour comprendre la situation de l'utilisateur
+- Tu collectes : son activité, ses objectifs, ses préférences
+- Quand tu as suffisamment d'informations (3-5 échanges), tu termines l'onboarding en incluant [ONBOARDING_COMPLETE] à la fin de ton message
+- Tu ne délègues PAS aux agents spécialisés pendant l'onboarding
+
+=== FIN MODE ONBOARDING ===
+"""
+
+
 def build_coordinator_prompt(persona: str, seed_data: dict) -> str:
     """
     Construit le prompt système pour le coordinateur.
 
     Le coordinateur reçoit un résumé de toutes les données (pas le détail).
+    Pour la persona "creator" en mode onboarding, des instructions spécifiques sont ajoutées.
 
     Args:
         persona: Type de persona ("creator", "freelance", "merchant")
@@ -190,6 +207,10 @@ def build_coordinator_prompt(persona: str, seed_data: dict) -> str:
             summary,
             "=== FIN DU RÉSUMÉ ===",
         ]
+
+    # Ajoute les instructions d'onboarding uniquement pour le persona créateur
+    if persona == "creator":
+        sections.append(ONBOARDING_INSTRUCTIONS_CREATOR)
 
     return "\n".join(sections)
 
