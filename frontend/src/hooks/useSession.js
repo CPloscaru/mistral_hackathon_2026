@@ -1,0 +1,31 @@
+/**
+ * useSession - Manages session ID persistence across page refreshes
+ *
+ * Uses sessionStorage to persist session_id within the browser tab.
+ * Generates a new UUID v4 if none exists.
+ */
+
+import { useState } from 'react'
+
+const SESSION_KEY = 'kameleon_session_id'
+
+function getOrCreateSessionId() {
+  let sessionId = sessionStorage.getItem(SESSION_KEY)
+  if (!sessionId) {
+    sessionId = crypto.randomUUID()
+    sessionStorage.setItem(SESSION_KEY, sessionId)
+  }
+  return sessionId
+}
+
+export function useSession() {
+  const [sessionId, setSessionId] = useState(() => getOrCreateSessionId())
+
+  function resetSession() {
+    const newId = crypto.randomUUID()
+    sessionStorage.setItem(SESSION_KEY, newId)
+    setSessionId(newId)
+  }
+
+  return { sessionId, resetSession }
+}
