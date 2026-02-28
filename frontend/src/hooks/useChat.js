@@ -13,60 +13,92 @@ import { useState, useCallback } from 'react'
 
 const BACKEND_URL = 'http://localhost:8000'
 
+/**
+ * Dispatch a parsed SSE event to the appropriate callback.
+ */
+function dispatchSSEEvent(eventType, dataLines, onToken, onMaturityUpdate, onDone, onError) {
+  if (!eventType) return
+
+  // SSE spec: multiple data: fields are joined with \n
+  const eventData = dataLines.join('\n')
+
+  if (eventType === 'token') {
+    onToken(eventData)
+  } else if (eventType === 'maturity_update') {
+    try {
+      const parsed = JSON.parse(eventData)
+      onMaturityUpdate(parsed.level)
+    } catch (e) {
+      console.warn('Failed to parse maturity_update:', eventData)
+    }
+  } else if (eventType === 'done') {
+    onDone()
+  } else if (eventType === 'error') {
+    try {
+      const parsed = JSON.parse(eventData)
+      onError(parsed.error || 'Erreur inconnue')
+    } catch (e) {
+      onError(eventData)
+    }
+  }
+}
+
 async function readSSEStream(response, onToken, onMaturityUpdate, onDone, onError) {
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
 
+  // Current event being assembled
+  let currentEventType = null
+  let currentDataLines = []
+
+  /**
+   * Process all complete lines in the buffer.
+   * SSE spec: events are terminated by a blank line.
+   * sse_starlette uses CRLF (\r\n) — we normalize to LF first.
+   */
+  function processBuffer() {
+    // Normalize CRLF to LF for consistent parsing
+    const normalized = buffer.replace(/\r\n/g, '\n')
+
+    // Split into lines, keeping track of position
+    const lines = normalized.split('\n')
+
+    // The last element may be an incomplete line — keep it in buffer
+    // (unless the buffer ended with \n, in which case last element is '')
+    const lastLine = lines.pop()
+    buffer = lastLine === undefined ? '' : lastLine
+
+    for (const line of lines) {
+      if (line === '') {
+        // Blank line: dispatch the current event
+        dispatchSSEEvent(currentEventType, currentDataLines, onToken, onMaturityUpdate, onDone, onError)
+        currentEventType = null
+        currentDataLines = []
+      } else if (line.startsWith('event: ')) {
+        currentEventType = line.slice(7).trim()
+      } else if (line.startsWith('data: ')) {
+        currentDataLines.push(line.slice(6))
+      } else if (line.startsWith('data')) {
+        // data with no space after colon = empty data field
+        currentDataLines.push('')
+      }
+      // Ignore comment lines (starting with ':') and id:/retry: fields
+    }
+  }
+
   try {
     while (true) {
       const { done, value } = await reader.read()
-      if (done) break
+      if (done) {
+        // Flush any remaining buffer content
+        buffer += '\n' // Force processing of last incomplete event if any
+        processBuffer()
+        break
+      }
 
       buffer += decoder.decode(value, { stream: true })
-
-      // Process complete SSE messages (separated by double newlines)
-      const parts = buffer.split('\n\n')
-      // Keep the last part which may be incomplete
-      buffer = parts.pop() || ''
-
-      for (const part of parts) {
-        if (!part.trim()) continue
-
-        const lines = part.split('\n')
-        let eventType = null
-        let eventData = null
-
-        for (const line of lines) {
-          if (line.startsWith('event: ')) {
-            eventType = line.slice(7).trim()
-          } else if (line.startsWith('data: ')) {
-            eventData = line.slice(6)
-          }
-        }
-
-        if (!eventType || eventData === null) continue
-
-        if (eventType === 'token') {
-          onToken(eventData)
-        } else if (eventType === 'maturity_update') {
-          try {
-            const parsed = JSON.parse(eventData)
-            onMaturityUpdate(parsed.level)
-          } catch (e) {
-            console.warn('Failed to parse maturity_update:', eventData)
-          }
-        } else if (eventType === 'done') {
-          onDone()
-        } else if (eventType === 'error') {
-          try {
-            const parsed = JSON.parse(eventData)
-            onError(parsed.error || 'Erreur inconnue')
-          } catch (e) {
-            onError(eventData)
-          }
-        }
-      }
+      processBuffer()
     }
   } catch (err) {
     onError(err.message || 'Erreur de connexion')
