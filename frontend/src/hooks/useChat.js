@@ -9,7 +9,7 @@
  * Uses functional updater form in setMessages to avoid stale closure issues.
  */
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 
 /**
  * Build the backend URL, preserving the subdomain from the current page's hostname.
@@ -140,11 +140,15 @@ export function useChat() {
   const [maturityLevel, setMaturityLevel] = useState(1)
   const [assistantName, setAssistantName] = useState(null)
 
+  // Ref to hold the current sessionId for use inside SSE callbacks
+  const sessionIdRef = useRef(null)
+
   /**
    * Shared SSE response handler
    * assistantMsgId: the id of the assistant message to stream tokens into
+   * sessionId: used by onReadyForPlan to trigger the Swarm call
    */
-  const handleSSEResponse = useCallback(async (response, assistantMsgId) => {
+  const handleSSEResponse = useCallback(async (response, assistantMsgId, sessionId) => {
     await readSSEStream(
       response,
       // onToken
@@ -188,10 +192,9 @@ export function useChat() {
         )
         setIsStreaming(false)
       },
-      // onReadyForPlan — profil collecté, plan en préparation
+      // onReadyForPlan — profil collecté, déclenche le Swarm automatiquement
       (_profile) => {
-        // Stop streaming — input is re-enabled
-        // The backend will send the plan as a subsequent message when ready
+        // Marquer l'Agent comme terminé
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === assistantMsgId
@@ -200,15 +203,60 @@ export function useChat() {
           )
         )
         setIsStreaming(false)
+
+        // Déclencher le Swarm après un court délai (laisse l'UI se stabiliser)
+        const sid = sessionId || sessionIdRef.current
+        if (sid) {
+          setTimeout(() => {
+            _triggerSwarmPlan(sid)
+          }, 500)
+        }
       }
     )
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  /**
+   * _triggerSwarmPlan — Déclenche le Swarm one-shot post-onboarding.
+   *
+   * Envoie directement un POST /chat/stream sans créer de bulle utilisateur.
+   * Le backend détecte onboarding_data dans la session et swap l'Agent pour le Swarm.
+   */
+  const _triggerSwarmPlan = useCallback(async (sessionId) => {
+    const assistantMsgId = Date.now()
+    setMessages((prev) => [
+      ...prev,
+      { role: 'assistant', content: '', id: assistantMsgId, streaming: true },
+    ])
+    setIsStreaming(true)
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/chat/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: '__PLAN__', session_id: sessionId }),
+      })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      await handleSSEResponse(response, assistantMsgId, sessionId)
+    } catch (err) {
+      console.error('Swarm plan error:', err)
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === assistantMsgId
+            ? { ...msg, content: 'Oups, un problème est survenu. Réessaie.', streaming: false }
+            : msg
+        )
+      )
+      setIsStreaming(false)
+    }
+  }, [handleSSEResponse])
 
   /**
    * sendMessage - User sends a message, streams assistant response
    */
   const sendMessage = useCallback(async (text, sessionId) => {
     if (!text.trim() || isStreaming) return
+
+    sessionIdRef.current = sessionId
 
     const userMsgId = Date.now()
     const assistantMsgId = Date.now() + 1
@@ -231,7 +279,7 @@ export function useChat() {
         throw new Error(`HTTP ${response.status}`)
       }
 
-      await handleSSEResponse(response, assistantMsgId)
+      await handleSSEResponse(response, assistantMsgId, sessionId)
     } catch (err) {
       console.error('sendMessage error:', err)
       setMessages((prev) =>
@@ -254,6 +302,7 @@ export function useChat() {
    * Called automatically on mount for creator persona
    */
   const initChat = useCallback(async (sessionId) => {
+    sessionIdRef.current = sessionId
     const assistantMsgId = Date.now()
 
     setMessages((prev) => [
@@ -272,7 +321,7 @@ export function useChat() {
         throw new Error(`HTTP ${response.status}`)
       }
 
-      await handleSSEResponse(response, assistantMsgId)
+      await handleSSEResponse(response, assistantMsgId, sessionId)
     } catch (err) {
       console.error('initChat error:', err)
       setMessages((prev) =>

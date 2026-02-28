@@ -104,6 +104,19 @@ async def _event_generator(session: dict, message: str):
     is_agent = isinstance(agent_or_swarm, Agent)
 
     try:
+        # Swarm one-shot : si on a les données d'onboarding et encore un Agent → swap
+        if (
+            is_agent
+            and isinstance(session.get("onboarding_data"), dict)
+            and session["onboarding_data"].get("prenom")
+        ):
+            session = session_manager.swap_to_swarm(session_id)
+            swarm = session["agent"]
+            profile_msg = json.dumps(session["onboarding_data"], ensure_ascii=False)
+            async for sse_event in _stream_swarm(swarm, profile_msg, session):
+                yield sse_event
+            return
+
         if not is_agent:
             # Mode Swarm (day-to-day) — délègue à _stream_swarm
             async for sse_event in _stream_swarm(agent_or_swarm, message, session):

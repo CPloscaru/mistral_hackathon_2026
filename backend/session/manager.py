@@ -182,6 +182,27 @@ class SessionManager:
             onboarding_data=session.get("onboarding_data", {}),
         )
 
+    def swap_to_swarm(self, session_id: str) -> dict:
+        """
+        Remplace l'Agent conversationnel par le Swarm onboarding dans la session.
+
+        Appelé quand le backend détecte onboarding_data dans la session et que
+        le prochain message doit déclencher le Swarm one-shot (plan SMART).
+
+        Args:
+            session_id: Identifiant unique de session
+
+        Returns:
+            Session mise à jour avec le Swarm comme agent
+        """
+        session = self._sessions.get(session_id)
+        if session is None:
+            raise ValueError(f"Session {session_id} introuvable")
+
+        swarm = create_onboarding_swarm()
+        session["agent"] = swarm
+        return session
+
     def delete_session(self, session_id: str):
         """
         Supprime une session de la mémoire.
