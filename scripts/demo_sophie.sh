@@ -35,7 +35,7 @@ echo ""
 
 # Ouvrir Chrome via playwright-cli
 echo "Ouverture du navigateur..."
-npx playwright-cli open http://sophie.localhost:5173 --browser chrome
+npx playwright-cli open http://sophie.localhost:5173 --browser chrome --headed
 
 # Turn 1: attendre la réponse init
 echo ""
