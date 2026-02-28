@@ -41,13 +41,12 @@ async def chat(request: Request, body: ChatRequest):
     session_id = body.session_id or str(uuid.uuid4())
 
     session = session_manager.get_or_create_session(session_id, persona)
-    swarm = session["swarm"]
+    agent_or_swarm = session["agent"]
 
     try:
-        result = swarm(body.message)
+        result = agent_or_swarm(body.message)
 
-        # Extraction du texte depuis le SwarmResult
-        # Le résultat final provient du coordinateur (entry_point) ou du dernier agent
+        # Extraction du texte depuis le résultat (Agent ou Swarm)
         text = _extract_text_from_result(result)
 
     except Exception as exc:
@@ -58,27 +57,43 @@ async def chat(request: Request, body: ChatRequest):
 
 def _extract_text_from_result(result) -> str:
     """
-    Extrait le texte lisible depuis un SwarmResult.
+    Extrait le texte lisible depuis un AgentResult ou SwarmResult.
 
     Stratégie :
-    1. Cherche le résultat du coordinateur dans results dict
-    2. Parcourt les agent results pour trouver le dernier texte
+    1. AgentResult (single agent) : accès direct via message ou str()
+    2. SwarmResult : cherche le résultat du coordinator/profiler dans results dict
     3. Fallback : str(result)
 
     Args:
-        result: SwarmResult retourné par swarm(message)
+        result: AgentResult ou SwarmResult
 
     Returns:
         Texte de la réponse de l'agent
     """
-    # Cherche d'abord le résultat du coordinateur
+    # AgentResult (single agent) — a un attribut message mais pas results
+    if hasattr(result, "message") and not hasattr(result, "results"):
+        msg = result.message
+        if isinstance(msg, dict):
+            # Extraire le texte des content blocks
+            content = msg.get("content", [])
+            texts = [
+                block.get("text", "")
+                for block in content
+                if isinstance(block, dict) and block.get("text")
+            ]
+            if texts:
+                return "\n".join(texts).strip()
+        return str(result).strip() or "Je n'ai pas pu générer de réponse."
+
+    # SwarmResult — cherche dans les résultats des noeuds
     if hasattr(result, "results") and result.results:
-        # Essai direct sur le noeud "coordinator"
-        coordinator_node = result.results.get("coordinator")
-        if coordinator_node is not None:
-            agent_results = coordinator_node.get_agent_results()
-            if agent_results:
-                return str(agent_results[-1]).strip()
+        # Essai direct sur les noeuds connus
+        for node_name in ("coordinator", "profiler"):
+            node = result.results.get(node_name)
+            if node is not None:
+                agent_results = node.get_agent_results()
+                if agent_results:
+                    return str(agent_results[-1]).strip()
 
         # Sinon, parcourt tous les noeuds dans l'ordre
         for node_result in result.results.values():

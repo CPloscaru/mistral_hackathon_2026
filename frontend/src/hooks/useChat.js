@@ -11,12 +11,26 @@
 
 import { useState, useCallback } from 'react'
 
-const BACKEND_URL = 'http://localhost:8000'
+/**
+ * Build the backend URL, preserving the subdomain from the current page's hostname.
+ * This ensures SubdomainMiddleware on the backend resolves the correct persona.
+ *
+ * Examples:
+ *   sophie.localhost:5173 → http://sophie.localhost:8000
+ *   lea.localhost:5173    → http://lea.localhost:8000
+ *   localhost:5173        → http://localhost:8000 (fallback)
+ */
+function buildBackendUrl() {
+  const hostname = window.location.hostname
+  return `http://${hostname}:8000`
+}
+
+const BACKEND_URL = buildBackendUrl()
 
 /**
  * Dispatch a parsed SSE event to the appropriate callback.
  */
-function dispatchSSEEvent(eventType, dataLines, onToken, onMaturityUpdate, onDone, onError) {
+function dispatchSSEEvent(eventType, dataLines, onToken, onMaturityUpdate, onDone, onError, onReadyForPlan) {
   if (!eventType) return
 
   // SSE spec: multiple data: fields are joined with \n
@@ -33,6 +47,19 @@ function dispatchSSEEvent(eventType, dataLines, onToken, onMaturityUpdate, onDon
     }
   } else if (eventType === 'done') {
     onDone()
+  } else if (eventType === 'ready_for_plan') {
+    // Onboarding phase 1 complete — backend will process the plan separately
+    // Treat as done for the streaming UI: stop the loader, re-enable input
+    if (onReadyForPlan) {
+      try {
+        const parsed = JSON.parse(eventData)
+        onReadyForPlan(parsed.profile || {})
+      } catch (e) {
+        onReadyForPlan({})
+      }
+    } else {
+      onDone()
+    }
   } else if (eventType === 'error') {
     try {
       const parsed = JSON.parse(eventData)
@@ -43,7 +70,7 @@ function dispatchSSEEvent(eventType, dataLines, onToken, onMaturityUpdate, onDon
   }
 }
 
-async function readSSEStream(response, onToken, onMaturityUpdate, onDone, onError) {
+async function readSSEStream(response, onToken, onMaturityUpdate, onDone, onError, onReadyForPlan) {
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
@@ -72,7 +99,7 @@ async function readSSEStream(response, onToken, onMaturityUpdate, onDone, onErro
     for (const line of lines) {
       if (line === '') {
         // Blank line: dispatch the current event
-        dispatchSSEEvent(currentEventType, currentDataLines, onToken, onMaturityUpdate, onDone, onError)
+        dispatchSSEEvent(currentEventType, currentDataLines, onToken, onMaturityUpdate, onDone, onError, onReadyForPlan)
         currentEventType = null
         currentDataLines = []
       } else if (line.startsWith('event: ')) {
@@ -156,6 +183,19 @@ export function useChat() {
                   content: 'Oups, un problème est survenu. Réessaie.',
                   streaming: false,
                 }
+              : msg
+          )
+        )
+        setIsStreaming(false)
+      },
+      // onReadyForPlan — profil collecté, plan en préparation
+      (_profile) => {
+        // Stop streaming — input is re-enabled
+        // The backend will send the plan as a subsequent message when ready
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantMsgId
+              ? { ...msg, streaming: false }
               : msg
           )
         )

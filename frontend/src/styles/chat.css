@@ -138,7 +138,7 @@ body {
   padding: 12px 12px 8px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 14px;
   /* Smooth scroll on iOS */
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;

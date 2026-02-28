@@ -1,9 +1,10 @@
 """
-Factory pour le Swarm d'onboarding Kameleon.
+Factory pour l'onboarding Kameleon — architecture en 2 phases.
 
-Swarm dédié à l'accompagnement des nouveaux utilisateurs (Sophie/creator).
-4 agents : coordinateur (mène la conversation), profiler (analyse + plan),
-recherche (web search Brave), expert FR (base de connaissances entrepreneuriat).
+Phase 1 : Agent conversationnel (Mistral Large) — guide la conversation,
+           collecte les infos, maintient l'historique entre les tours.
+Phase 2 : Swarm one-shot (profiler + recherche + expert_fr) — lancé une seule fois
+           quand l'Agent a collecté assez d'infos, produit le plan final.
 """
 from strands import Agent
 from strands.models.mistral import MistralModel
@@ -17,7 +18,7 @@ from backend.config import (
     MODEL_14B,
 )
 from backend.agents.prompts import (
-    ONBOARDING_COORDINATOR_PROMPT,
+    ONBOARDING_CONVERSATION_PROMPT,
     ONBOARDING_PROFILER_PROMPT,
     ONBOARDING_RECHERCHE_PROMPT,
     ONBOARDING_EXPERT_FR_PROMPT,
@@ -25,30 +26,37 @@ from backend.agents.prompts import (
 from backend.tools.web_search import web_search
 
 
-def create_onboarding_swarm() -> Swarm:
+def create_onboarding_agent() -> Agent:
     """
-    Construit le Swarm d'onboarding pour les nouveaux utilisateurs.
+    Agent conversationnel pour la collecte d'infos pendant l'onboarding.
 
-    Architecture :
-    - Coordinator (Mistral Large) : mène la conversation, collecte les infos, orchestre
-    - Profiler (8B) : analyse le profil et produit un plan d'action personnalisé
-    - Recherche (14B + web_search tool) : recherche web temps réel via Brave Search
-    - Expert FR (8B) : base de connaissances entrepreneuriat français intégrée au prompt
-
-    Returns:
-        Swarm configuré avec le coordinateur comme entry_point
+    Utilise Mistral Large avec une fenêtre de conversation de 40 messages.
+    Maintient l'historique entre les tours (pas de reset).
+    Émet [READY_FOR_PLAN] + un résumé JSON quand il a assez d'infos.
     """
-    coordinator = Agent(
-        name="coordinator",
+    return Agent(
+        name="onboarding_coordinator",
         model=MistralModel(
             model_id=COORDINATOR_MODEL,
             api_key=MISTRAL_API,
         ),
-        system_prompt=ONBOARDING_COORDINATOR_PROMPT,
+        system_prompt=ONBOARDING_CONVERSATION_PROMPT,
         callback_handler=None,
         conversation_manager=SlidingWindowConversationManager(window_size=40),
     )
 
+
+def create_onboarding_swarm() -> Swarm:
+    """
+    Swarm one-shot pour le traitement final de l'onboarding.
+
+    Architecture :
+    - Profiler (8B) : entry point, analyse le profil JSON et produit un plan SMART
+    - Recherche (14B + web_search) : recherche web temps réel via Brave Search
+    - Expert FR (8B) : base de connaissances entrepreneuriat français
+
+    Le profiler est l'entry point (pas de coordinator — la conversation est déjà faite).
+    """
     profiler = Agent(
         name="profiler",
         model=MistralModel(
@@ -84,8 +92,8 @@ def create_onboarding_swarm() -> Swarm:
     )
 
     swarm = Swarm(
-        [coordinator, profiler, recherche, expert_fr],
-        entry_point=coordinator,
+        [profiler, recherche, expert_fr],
+        entry_point=profiler,
         max_handoffs=10,
         execution_timeout=120.0,
     )

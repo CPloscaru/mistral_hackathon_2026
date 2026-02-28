@@ -1,6 +1,6 @@
 """
 Gestionnaire de sessions en mémoire pour Kameleon.
-Maintient un dictionnaire de sessions actives et crée les Swarms Strands par session.
+Maintient un dictionnaire de sessions actives et crée les Agents/Swarms Strands par session.
 Persiste les sessions dans SQLite via backend.session.db.
 """
 import json
@@ -8,7 +8,7 @@ import uuid
 from pathlib import Path
 
 from backend.agents.factory import create_swarm
-from backend.agents.onboarding import create_onboarding_swarm
+from backend.agents.onboarding import create_onboarding_agent, create_onboarding_swarm
 from backend.session import db
 
 # Chemin vers le dossier de données seed
@@ -23,7 +23,7 @@ class SessionManager:
     - Un identifiant unique
     - La persona résolue depuis le sous-domaine
     - Les données de seed chargées depuis les fichiers JSON
-    - Un Swarm Strands dédié (1 swarm par session)
+    - Un Agent ou Swarm Strands dédié (1 par session) sous la clé "agent"
     - Le niveau de maturité de la persona (1-4)
     - Les widgets actifs dans la session
     - Le nom de l'assistant choisi par l'utilisateur
@@ -61,15 +61,15 @@ class SessionManager:
         # Sophie démarre sans données — elle remplit son espace au fil de l'onboarding
         self._seed_data["creator"] = {}
 
-    def _create_swarm_for_persona(self, persona: str, seed_data: dict, maturity_level: int):
+    def _create_agent_for_persona(self, persona: str, seed_data: dict, maturity_level: int):
         """
-        Crée le swarm approprié selon la persona et le niveau de maturité.
+        Crée l'agent/swarm approprié selon la persona et le niveau de maturité.
 
-        - Creator (Sophie) en onboarding (maturity=1) → swarm onboarding dédié
-        - Tous les autres cas → swarm standard day-to-day
+        - Creator (Sophie) en onboarding (maturity=1) → Agent conversationnel
+        - Tous les autres cas → Swarm standard day-to-day
         """
         if persona == "creator" and maturity_level == 1:
-            return create_onboarding_swarm()
+            return create_onboarding_agent()
         return create_swarm(persona, seed_data)
 
     def get_or_create_session(self, session_id: str, persona: str) -> dict:
@@ -86,7 +86,7 @@ class SessionManager:
             persona: Type de persona ("creator" | "freelance" | "merchant")
 
         Returns:
-            Dictionnaire de session avec swarm, seed_data, etc.
+            Dictionnaire de session avec agent, seed_data, etc.
         """
         # 1. Cache mémoire
         if session_id in self._sessions:
@@ -95,30 +95,36 @@ class SessionManager:
         # 2. Essai depuis SQLite
         db_record = db.load_session(session_id)
         if db_record is not None:
-            seed_data = self._seed_data.get(db_record["persona"], {})
-            swarm = self._create_swarm_for_persona(
-                db_record["persona"], seed_data, db_record["maturity_level"]
-            )
-            session = {
-                "session_id": db_record["session_id"],
-                "persona": db_record["persona"],
-                "seed_data": seed_data,
-                "swarm": swarm,
-                "maturity_level": db_record["maturity_level"],
-                "active_widgets": [],
-                "assistant_name": db_record["assistant_name"],
-            }
-            self._sessions[session_id] = session
-            return session
+            # Si la persona stockée ne correspond pas à la persona demandée,
+            # ignorer l'enregistrement SQLite pour éviter les cross-subdomain contaminations
+            # (ex: même session_id utilisée sur sophie.localhost puis lea.localhost)
+            if db_record["persona"] != persona:
+                pass  # Fall through to create a new session
+            else:
+                seed_data = self._seed_data.get(db_record["persona"], {})
+                agent = self._create_agent_for_persona(
+                    db_record["persona"], seed_data, db_record["maturity_level"]
+                )
+                session = {
+                    "session_id": db_record["session_id"],
+                    "persona": db_record["persona"],
+                    "seed_data": seed_data,
+                    "agent": agent,
+                    "maturity_level": db_record["maturity_level"],
+                    "active_widgets": [],
+                    "assistant_name": db_record["assistant_name"],
+                }
+                self._sessions[session_id] = session
+                return session
 
         # 3. Nouvelle session
         seed_data = self._seed_data.get(persona, {})
-        swarm = self._create_swarm_for_persona(persona, seed_data, 1)
+        agent = self._create_agent_for_persona(persona, seed_data, 1)
         session = {
             "session_id": session_id,
             "persona": persona,
             "seed_data": seed_data,
-            "swarm": swarm,
+            "agent": agent,
             "maturity_level": 1,
             "active_widgets": [],
             "assistant_name": None,
