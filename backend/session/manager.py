@@ -8,6 +8,7 @@ import uuid
 from pathlib import Path
 
 from backend.agents.factory import create_swarm
+from backend.agents.onboarding import create_onboarding_swarm
 from backend.session import db
 
 # Chemin vers le dossier de données seed
@@ -60,6 +61,17 @@ class SessionManager:
         # Sophie démarre sans données — elle remplit son espace au fil de l'onboarding
         self._seed_data["creator"] = {}
 
+    def _create_swarm_for_persona(self, persona: str, seed_data: dict, maturity_level: int):
+        """
+        Crée le swarm approprié selon la persona et le niveau de maturité.
+
+        - Creator (Sophie) en onboarding (maturity=1) → swarm onboarding dédié
+        - Tous les autres cas → swarm standard day-to-day
+        """
+        if persona == "creator" and maturity_level == 1:
+            return create_onboarding_swarm()
+        return create_swarm(persona, seed_data)
+
     def get_or_create_session(self, session_id: str, persona: str) -> dict:
         """
         Retourne la session existante (mémoire ou SQLite) ou en crée une nouvelle.
@@ -84,11 +96,14 @@ class SessionManager:
         db_record = db.load_session(session_id)
         if db_record is not None:
             seed_data = self._seed_data.get(db_record["persona"], {})
+            swarm = self._create_swarm_for_persona(
+                db_record["persona"], seed_data, db_record["maturity_level"]
+            )
             session = {
                 "session_id": db_record["session_id"],
                 "persona": db_record["persona"],
                 "seed_data": seed_data,
-                "swarm": create_swarm(db_record["persona"], seed_data),
+                "swarm": swarm,
                 "maturity_level": db_record["maturity_level"],
                 "active_widgets": [],
                 "assistant_name": db_record["assistant_name"],
@@ -98,11 +113,12 @@ class SessionManager:
 
         # 3. Nouvelle session
         seed_data = self._seed_data.get(persona, {})
+        swarm = self._create_swarm_for_persona(persona, seed_data, 1)
         session = {
             "session_id": session_id,
             "persona": persona,
             "seed_data": seed_data,
-            "swarm": create_swarm(persona, seed_data),
+            "swarm": swarm,
             "maturity_level": 1,
             "active_widgets": [],
             "assistant_name": None,
