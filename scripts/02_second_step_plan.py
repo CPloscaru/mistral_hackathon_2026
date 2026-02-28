@@ -2,8 +2,8 @@
 Test automatisé — Phase 2 de l'onboarding (Swarm one-shot plan SMART).
 
 Lit le profil JSON du dernier run 01_first_step_onboarding, snapshot la DB,
-injecte les données d'onboarding dans une nouvelle session, déclenche le Swarm
-via le navigateur et sauvegarde le plan produit.
+injecte les données d'onboarding dans une nouvelle session, ouvre
+/personal-assistant et attend le plan_ready structuré.
 
 Usage:
     source venv/bin/activate
@@ -65,57 +65,77 @@ def pw_eval(js: str) -> str:
     return ""
 
 
-def get_last_assistant_message() -> str:
-    """Lit le textContent du dernier message assistant dans le DOM."""
-    return pw_eval(
-        "[...document.querySelectorAll('.message-bubble--assistant')].pop()?.textContent || ''"
-    ).strip()
-
-
-def wait_for_response(prev_msg: str = "", timeout: int = 180) -> str:
+def wait_for_plan_display(timeout: int = 180) -> str:
     """
-    Poll le DOM : attend qu'un nouveau message assistant apparaisse
-    (différent de prev_msg) et que le streaming soit terminé.
-
-    Vérifie .message-bubble--streaming (pas .typing-indicator-row,
-    qui disparaît dès les premiers tokens).
+    Poll le DOM : attend que l'objectif SMART s'affiche dans .smart-display__objectif
+    (après le spinner + typewriter).
     """
     start = time.time()
-    time.sleep(3)
+    time.sleep(5)  # Au moins 3s de spinner + marge
 
     while time.time() - start < timeout:
-        # Vérifie si un message est encore en cours de streaming
-        still_streaming = pw_eval(
-            "!!document.querySelector('.message-bubble--streaming')"
+        # Vérifier si on est encore en phase spinner
+        has_spinner = pw_eval(
+            "!!document.querySelector('.spinner-overlay')"
         )
-        if still_streaming == "false":
-            text = get_last_assistant_message()
-            if text and text != prev_msg:
-                return text
+        if has_spinner == "true":
+            time.sleep(2)
+            continue
+
+        # Vérifier si l'objectif est affiché
+        objectif = pw_eval(
+            "document.querySelector('.smart-display__objectif')?.textContent || ''"
+        ).strip()
+
+        if objectif and len(objectif) > 10:
+            return objectif
+
         time.sleep(2)
 
-    text = get_last_assistant_message()
-    if text and text != prev_msg:
-        return text
     return "[TIMEOUT]"
 
 
-def send_message_browser(text: str):
-    """Tape un message dans le chat via JS (indépendant des refs playwright)."""
-    safe_text = text.replace("'", "\\'").replace("\n", "\\n")
-    # Remplir le textarea via React-compatible value setter
-    pw_eval(
-        f"(()=>{{const ta=document.querySelector('textarea[aria-label=\"Votre message\"]');"
-        f"const set=Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set;"
-        f"set.call(ta,'{safe_text}');"
-        f"ta.dispatchEvent(new Event('input',{{bubbles:true}}));"
-        f"ta.dispatchEvent(new Event('change',{{bubbles:true}}))}})()"
-    )
-    time.sleep(0.3)
-    # Cliquer le bouton Envoyer
-    pw_eval(
-        "document.querySelector('button[aria-label=\"Envoyer\"]').click()"
-    )
+def get_plan_json_from_dom() -> dict | None:
+    """
+    Tente de récupérer les données du plan depuis le DOM.
+    Lit les phases et prochaines étapes depuis les éléments affichés.
+    """
+    try:
+        # Lire l'objectif
+        objectif = pw_eval(
+            "document.querySelector('.smart-display__objectif')?.textContent || ''"
+        ).strip()
+
+        # Lire les phases
+        phases_json = pw_eval(
+            "[...document.querySelectorAll('.smart-display__phase')].map(p => ({"
+            "titre: p.querySelector('.smart-display__phase-title')?.textContent || '',"
+            "objectif: p.querySelector('.smart-display__phase-objectif')?.textContent || '',"
+            "actions: [...p.querySelectorAll('.smart-display__phase-actions li')].map(a => a.textContent)"
+            "}))"
+        )
+
+        # Lire les prochaines étapes
+        etapes_json = pw_eval(
+            "[...document.querySelectorAll('.smart-display__etapes li')].map(e => e.textContent)"
+        )
+
+        plan = {"objectif_smart": objectif}
+
+        try:
+            plan["phases"] = json.loads(phases_json)
+        except (json.JSONDecodeError, TypeError):
+            plan["phases"] = []
+
+        try:
+            plan["prochaines_etapes"] = json.loads(etapes_json)
+        except (json.JSONDecodeError, TypeError):
+            plan["prochaines_etapes"] = []
+
+        return plan if objectif else None
+    except Exception as e:
+        print(f"  ERREUR lecture DOM: {e}")
+        return None
 
 
 # ─── DB helpers ────────────────────────────────────────────────────
@@ -159,65 +179,6 @@ def restore_db():
         print(f"  DB restaurée depuis: {SNAPSHOT_PATH}")
     else:
         print("  AVERTISSEMENT: kameleon_snapshot.db introuvable, pas de restauration")
-
-
-def get_latest_creator_session_id() -> str | None:
-    """
-    Lit la dernière session creator dans SQLite.
-    Retourne le session_id ou None.
-    """
-    if not DB_PATH.exists():
-        return None
-    try:
-        conn = sqlite3.connect(str(DB_PATH), timeout=5)
-        cursor = conn.execute(
-            "SELECT session_id FROM sessions "
-            "WHERE persona = 'creator' ORDER BY rowid DESC LIMIT 1"
-        )
-        row = cursor.fetchone()
-        conn.close()
-        return row[0] if row else None
-    except Exception as e:
-        print(f"  ERREUR DB: {e}")
-        return None
-
-
-def inject_onboarding_data(session_id: str, profile: dict):
-    """
-    Injecte le profil JSON dans la session via l'API backend.
-    Cela met à jour à la fois la mémoire et SQLite.
-    """
-    import urllib.request
-
-    payload = json.dumps(
-        {"session_id": session_id, "profile": profile},
-        ensure_ascii=False,
-    ).encode("utf-8")
-
-    req = urllib.request.Request(
-        "http://sophie.localhost:8000/chat/inject-onboarding",
-        data=payload,
-        headers={"Content-Type": "application/json", "Host": "sophie.localhost:8000"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            result = json.loads(resp.read())
-            if result.get("ok"):
-                print(f"  onboarding_data injecté via API pour session: {session_id}")
-            else:
-                print(f"  ERREUR API: {result}")
-    except Exception as e:
-        print(f"  ERREUR injection API: {e}")
-        # Fallback : injection directe SQLite
-        conn = sqlite3.connect(str(DB_PATH), timeout=5)
-        conn.execute(
-            "UPDATE sessions SET onboarding_data = ? WHERE session_id = ?",
-            (json.dumps(profile, ensure_ascii=False), session_id),
-        )
-        conn.commit()
-        conn.close()
-        print(f"  Fallback: onboarding_data injecté via SQLite pour session: {session_id}")
 
 
 def check_maturity_level(session_id: str) -> int | None:
@@ -269,7 +230,7 @@ def get_session_state(session_id: str) -> dict:
 def run():
     print("=" * 60)
     print(" ONBOARDING SOPHIE — Phase 2 (Swarm one-shot plan SMART)")
-    print(" Crée session en DB → ouvre navigateur → Swarm produit plan")
+    print(" → /personal-assistant avec spinner + objectif SMART")
     print("=" * 60)
 
     # 1. Trouver le profil du dernier run 01
@@ -305,30 +266,29 @@ def run():
     print(f"  session_id: {session_id}")
     print(f"  onboarding_data pré-injecté ({len(json.dumps(profile))} chars)")
 
-    # 5. Ouvrir le navigateur avec ?session_id=XXX
-    #    Le frontend lit le query param → utilise notre session_id
-    #    Le backend charge la session depuis SQLite → voit onboarding_data → swap au Swarm
-    print("\n5. Ouverture du navigateur...")
-    pw(f"open http://sophie.localhost:5173?session_id={session_id} --browser chrome --headed")
+    # 5. Ouvrir le navigateur directement sur /personal-assistant
+    print("\n5. Ouverture du navigateur sur /personal-assistant...")
+    url = f"http://sophie.localhost:5173/personal-assistant?session_id={session_id}"
+    pw(f"open {url} --browser chrome --headed")
 
-    # 6. Attendre la réponse du Swarm (plan SMART — peut être long)
-    print("\n6. Attente du plan SMART (Swarm — jusqu'à 180s)...")
-    plan_text = wait_for_response(prev_msg="", timeout=180)
+    # 6. Attendre l'affichage de l'objectif SMART (après spinner + typewriter)
+    print("\n6. Attente de l'objectif SMART (spinner ≥ 3s + typewriter — jusqu'à 180s)...")
+    objectif_text = wait_for_plan_display(timeout=180)
 
-    if plan_text == "[TIMEOUT]":
-        print("  ERREUR: Timeout en attente du plan Swarm")
-        plan_text = get_last_assistant_message() or "[TIMEOUT]"
-
-    print(f"\n  Plan reçu ({len(plan_text)} chars):")
-    print(f"  {plan_text[:500]}{'...' if len(plan_text) > 500 else ''}")
-
-    # 7. Vérifier [ONBOARDING_COMPLETE] (ne doit PAS apparaître dans le DOM)
-    print("\n7. Vérification: [ONBOARDING_COMPLETE] absent du DOM...")
-    sentinel_visible = "[ONBOARDING_COMPLETE]" in plan_text
-    if sentinel_visible:
-        print("  ERREUR: [ONBOARDING_COMPLETE] visible dans le DOM !")
+    if objectif_text == "[TIMEOUT]":
+        print("  ERREUR: Timeout en attente de l'objectif SMART")
     else:
-        print("  OK: sentinel absent du texte visible")
+        print(f"\n  Objectif reçu ({len(objectif_text)} chars):")
+        print(f"  \"{objectif_text[:200]}{'...' if len(objectif_text) > 200 else ''}\"")
+
+    # 7. Récupérer le plan structuré depuis le DOM
+    print("\n7. Extraction du plan structuré depuis le DOM...")
+    plan_data = get_plan_json_from_dom()
+    if plan_data:
+        print(f"  Plan extrait: {len(plan_data.get('phases', []))} phases, "
+              f"{len(plan_data.get('prochaines_etapes', []))} étapes")
+    else:
+        print("  AVERTISSEMENT: plan structuré non trouvable dans le DOM")
 
     # 8. Vérifier le maturity_level en DB
     print("\n8. Vérification du maturity_level...")
@@ -341,10 +301,18 @@ def run():
     # 9. Sauvegarder les résultats
     print("\n9. Sauvegarde des résultats...")
 
-    plan_path = RUN_DIR / "plan.txt"
-    with open(plan_path, "w", encoding="utf-8") as f:
-        f.write(plan_text)
-    print(f"  Plan: {plan_path}")
+    # Plan structuré JSON
+    if plan_data:
+        plan_path = RUN_DIR / "plan.json"
+        with open(plan_path, "w", encoding="utf-8") as f:
+            json.dump(plan_data, f, ensure_ascii=False, indent=2)
+        print(f"  Plan JSON: {plan_path}")
+
+    # Plan texte (objectif seul)
+    plan_txt_path = RUN_DIR / "plan.txt"
+    with open(plan_txt_path, "w", encoding="utf-8") as f:
+        f.write(objectif_text)
+    print(f"  Plan texte: {plan_txt_path}")
 
     profile_path = RUN_DIR / "profile_input.json"
     with open(profile_path, "w", encoding="utf-8") as f:
@@ -364,7 +332,7 @@ def run():
     print(f"\n{'=' * 60}")
     print(f" Run terminé: {RUN_DIR}")
     print(f" maturity_level final: {maturity}")
-    print(f" [ONBOARDING_COMPLETE] dans DOM: {sentinel_visible}")
+    print(f" Plan structuré: {'OK' if plan_data else 'NON'}")
     print("=" * 60)
     print("Navigateur ouvert pour inspection.")
 

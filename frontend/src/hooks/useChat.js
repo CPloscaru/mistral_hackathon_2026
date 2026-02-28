@@ -60,6 +60,15 @@ function dispatchSSEEvent(eventType, dataLines, onToken, onMaturityUpdate, onDon
     } else {
       onDone()
     }
+  } else if (eventType === 'plan_ready') {
+    // Swarm finished with structured plan — redirect to /personal-assistant
+    if (onReadyForPlan) {
+      onReadyForPlan({})
+    } else {
+      onDone()
+    }
+  } else if (eventType === 'progress') {
+    // Heartbeat from Swarm — ignore silently
   } else if (eventType === 'error') {
     try {
       const parsed = JSON.parse(eventData)
@@ -143,6 +152,9 @@ export function useChat() {
   // Ref to hold the current sessionId for use inside SSE callbacks
   const sessionIdRef = useRef(null)
 
+  // Callback ref for ready_for_plan redirect (set by App.jsx)
+  const onReadyForPlanRedirectRef = useRef(null)
+
   /**
    * Shared SSE response handler
    * assistantMsgId: the id of the assistant message to stream tokens into
@@ -192,7 +204,7 @@ export function useChat() {
         )
         setIsStreaming(false)
       },
-      // onReadyForPlan — profil collecté, déclenche le Swarm automatiquement
+      // onReadyForPlan — profil collecté, redirige vers /personal-assistant
       (_profile) => {
         // Marquer l'Agent comme terminé
         setMessages((prev) =>
@@ -204,11 +216,10 @@ export function useChat() {
         )
         setIsStreaming(false)
 
-        // Déclencher le Swarm après un court délai (laisse l'UI se stabiliser)
-        const sid = sessionId || sessionIdRef.current
-        if (sid) {
+        // Rediriger vers /personal-assistant (le Swarm sera lancé là-bas)
+        if (onReadyForPlanRedirectRef.current) {
           setTimeout(() => {
-            _triggerSwarmPlan(sid)
+            onReadyForPlanRedirectRef.current()
           }, 500)
         }
       }
@@ -339,6 +350,42 @@ export function useChat() {
     }
   }, [handleSSEResponse])
 
+  /**
+   * loadHistory - Charge l'historique des messages depuis le backend
+   * Retourne true si des messages ont été chargés, false sinon
+   */
+  const loadHistory = useCallback(async (sessionId) => {
+    try {
+      const response = await fetch(
+        `${BACKEND_URL}/chat/history?session_id=${sessionId}`
+      )
+      if (!response.ok) return false
+
+      const data = await response.json()
+      if (data.messages && data.messages.length > 0) {
+        const restored = data.messages.map((msg, idx) => ({
+          role: msg.role,
+          content: msg.content,
+          id: idx,
+          streaming: false,
+        }))
+        setMessages(restored)
+        return true
+      }
+      return false
+    } catch (err) {
+      console.error('loadHistory error:', err)
+      return false
+    }
+  }, [])
+
+  /**
+   * setOnReadyForPlan — Register a callback for onboarding → personal-assistant redirect
+   */
+  const setOnReadyForPlan = useCallback((fn) => {
+    onReadyForPlanRedirectRef.current = fn
+  }, [])
+
   return {
     messages,
     isStreaming,
@@ -347,5 +394,7 @@ export function useChat() {
     setAssistantName,
     sendMessage,
     initChat,
+    loadHistory,
+    setOnReadyForPlan,
   }
 }

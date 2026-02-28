@@ -17,6 +17,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from backend.routes.chat import ChatRequest
 from backend.session.manager import session_manager
+from backend.session import db
 
 # Sentinels
 READY_SENTINEL = "[READY_FOR_PLAN]"
@@ -36,11 +37,47 @@ def _extract_profile_json(text: str) -> dict | None:
     return None
 
 
+def _extract_plan_json(text: str) -> dict | None:
+    """
+    Extrait le JSON de plan structuré.
+    Tente d'abord <plan_json>...</plan_json>, puis ```json...```, puis un JSON brut.
+    """
+    # 1. Balises <plan_json>
+    match = re.search(r"<plan_json>\s*(\{.*\})\s*</plan_json>", text, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group(1))
+        except json.JSONDecodeError:
+            pass
+
+    # 2. Bloc markdown ```json ... ```
+    match = re.search(r"```(?:json)?\s*(\{.*\})\s*```", text, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group(1))
+        except json.JSONDecodeError:
+            pass
+
+    # 3. JSON brut (premier { ... dernier })
+    match = re.search(r"(\{.*\})", text, re.DOTALL)
+    if match:
+        try:
+            data = json.loads(match.group(1))
+            # Valider que ça ressemble à un plan
+            if "objectif_smart" in data or "phases" in data:
+                return data
+        except json.JSONDecodeError:
+            pass
+
+    return None
+
+
 async def _stream_swarm(swarm, message: str, session: dict):
     """
     Streame les événements d'un Swarm (format multiagent).
 
     Détecte [ONBOARDING_COMPLETE] pour émettre maturity_update.
+    Extrait <plan_json> pour émettre plan_ready (au lieu de streamer le texte brut).
     """
     import logging
     logger = logging.getLogger("kameleon.swarm")
@@ -67,26 +104,10 @@ async def _stream_swarm(swarm, message: str, session: dict):
             token_count += 1
             full_text += raw_data
 
-            if ONBOARDING_SENTINEL in raw_data:
-                clean_text = raw_data.replace(ONBOARDING_SENTINEL, "").strip()
-
-                current_level = session["maturity_level"]
-                new_level = current_level + 1
-                session_manager.update_session_state(
-                    session_id=session_id,
-                    maturity_level=new_level,
-                )
-                logger.info("ONBOARDING_COMPLETE detected, maturity %d→%d", current_level, new_level)
-
-                if clean_text:
-                    yield {"data": clean_text, "event": "token"}
-
-                yield {
-                    "data": json.dumps({"level": new_level}, ensure_ascii=False),
-                    "event": "maturity_update",
-                }
-            else:
-                yield {"data": raw_data, "event": "token"}
+            # Ne pas streamer les tokens — on attend le résultat complet pour extraire plan_json
+            # On émet juste un heartbeat pour que le client sache que ça travaille
+            if token_count % 50 == 0:
+                yield {"data": json.dumps({"tokens": token_count}), "event": "progress"}
 
         elif event_type == "multiagent_result":
             has_sentinel = ONBOARDING_SENTINEL in full_text
@@ -95,6 +116,50 @@ async def _stream_swarm(swarm, message: str, session: dict):
                 token_count, len(full_text), has_sentinel,
                 full_text[-100:].replace("\n", "\\n"),
             )
+
+            # Extraire le plan JSON structuré
+            plan_data = _extract_plan_json(full_text)
+
+            # Bump maturity si sentinel détecté (une seule fois : 1→2)
+            current_level = session["maturity_level"]
+            if has_sentinel and current_level == 1:
+                new_level = 2
+                session_manager.update_session_state(
+                    session_id=session_id,
+                    maturity_level=new_level,
+                )
+                logger.info("ONBOARDING_COMPLETE detected, maturity %d→%d", current_level, new_level)
+
+                yield {
+                    "data": json.dumps({"level": new_level}, ensure_ascii=False),
+                    "event": "maturity_update",
+                }
+
+            # Persister la réponse (nettoyée)
+            clean_full = full_text.replace(ONBOARDING_SENTINEL, "").strip()
+            clean_full = re.sub(
+                r"<plan_json>.*?</plan_json>", "", clean_full, flags=re.DOTALL
+            ).strip()
+            if clean_full:
+                db.save_message(session_id, "assistant", clean_full)
+
+            # Émettre plan_ready avec le JSON structuré (ou fallback texte)
+            if plan_data:
+                # Persister aussi le plan structuré dans la session
+                session_manager.update_session_state(
+                    session_id=session_id,
+                    plan_data=plan_data,
+                )
+                yield {
+                    "data": json.dumps(plan_data, ensure_ascii=False),
+                    "event": "plan_ready",
+                }
+            else:
+                # Fallback : pas de JSON structuré, streamer le texte brut
+                logger.warning("Pas de <plan_json> trouvé, fallback texte brut")
+                if clean_full:
+                    yield {"data": clean_full, "event": "token"}
+
             yield {
                 "data": json.dumps(
                     {
@@ -107,10 +172,8 @@ async def _stream_swarm(swarm, message: str, session: dict):
             }
 
         else:
-            # Log tout type d'événement inattendu
             logger.info("❓ Swarm event non géré: type=%s keys=%s", event_type, list(event.keys()))
 
-    # Fin de la boucle — si on arrive ici sans multiagent_result, c'est un problème
     logger.info(
         "🏁 _stream_swarm loop ended — %d tokens, %d chars, sentinel_found=%s",
         token_count, len(full_text), ONBOARDING_SENTINEL in full_text,
@@ -133,19 +196,39 @@ async def _event_generator(session: dict, message: str):
     session_id = session["session_id"]
     is_agent = isinstance(agent_or_swarm, Agent)
 
+    # Persister le message utilisateur (sauf messages synthétiques)
+    if message not in ("__INIT__", "__PLAN__"):
+        db.save_message(session_id, "user", message)
+
     try:
-        # Swarm one-shot : si on a les données d'onboarding et encore un Agent → swap
+        # Swarm one-shot : si on a les données d'onboarding et encore un Agent
         if (
             is_agent
             and isinstance(session.get("onboarding_data"), dict)
             and session["onboarding_data"].get("prenom")
         ):
-            session = session_manager.swap_to_swarm(session_id)
-            swarm = session["agent"]
-            profile_msg = json.dumps(session["onboarding_data"], ensure_ascii=False)
-            async for sse_event in _stream_swarm(swarm, profile_msg, session):
-                yield sse_event
-            return
+            if message == "__PLAN__":
+                # Lancé depuis /personal-assistant → exécuter le Swarm
+                session = session_manager.swap_to_swarm(session_id)
+                swarm = session["agent"]
+                profile_msg = json.dumps(session["onboarding_data"], ensure_ascii=False)
+                async for sse_event in _stream_swarm(swarm, profile_msg, session):
+                    yield sse_event
+                return
+            else:
+                # Message utilisateur depuis / → redirect vers /personal-assistant
+                yield {
+                    "data": json.dumps(
+                        {"profile": session.get("onboarding_data", {})},
+                        ensure_ascii=False,
+                    ),
+                    "event": "plan_ready",
+                }
+                yield {
+                    "data": json.dumps({"done": True}, ensure_ascii=False),
+                    "event": "done",
+                }
+                return
 
         if not is_agent:
             # Mode Swarm (day-to-day) — délègue à _stream_swarm
@@ -195,6 +278,15 @@ async def _event_generator(session: dict, message: str):
                     buffer = ""
 
             elif "result" in event:
+                # Persister la réponse assistant (nettoyée des sentinels et balises)
+                clean_assistant = full_text.split(READY_SENTINEL)[0].strip()
+                # Retirer les balises <profile_json>...</profile_json>
+                clean_assistant = re.sub(
+                    r"<profile_json>.*?</profile_json>", "", clean_assistant, flags=re.DOTALL
+                ).strip()
+                if clean_assistant:
+                    db.save_message(session_id, "assistant", clean_assistant)
+
                 if READY_SENTINEL in full_text:
                     # Extraire le JSON de profil
                     profile_json = _extract_profile_json(full_text)
@@ -234,6 +326,21 @@ async def _event_generator(session: dict, message: str):
         }
 
 
+@router.get("/chat/history")
+async def chat_history(session_id: str):
+    """
+    Retourne l'historique des messages d'une session.
+
+    Args:
+        session_id: Identifiant de session (query param)
+
+    Returns:
+        Liste de messages {role, content, created_at}
+    """
+    messages = db.load_messages(session_id)
+    return {"messages": messages}
+
+
 @router.post("/chat/inject-onboarding")
 async def inject_onboarding(request: Request, body: dict):
     """
@@ -252,6 +359,25 @@ async def inject_onboarding(request: Request, body: dict):
         onboarding_data=profile,
     )
     return {"ok": True, "session_id": session_id}
+
+
+@router.get("/chat/session-info")
+async def session_info(request: Request, session_id: str):
+    """
+    Retourne les infos publiques de la session (prenom, assistant_name, persona).
+    Utilisé par le frontend PersonalAssistant pour personnaliser l'interface.
+    """
+    record = db.load_session(session_id)
+    if record is None:
+        return {"error": "Session introuvable"}
+
+    onboarding_data = record.get("onboarding_data") or {}
+    return {
+        "prenom": onboarding_data.get("prenom"),
+        "assistant_name": record.get("assistant_name"),
+        "persona": record.get("persona"),
+        "maturity_level": record.get("maturity_level"),
+    }
 
 
 @router.post("/chat/stream")

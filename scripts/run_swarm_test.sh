@@ -1,6 +1,6 @@
 #!/bin/bash
 # Lance backend + frontend + test Swarm plan SMART (phase 2 onboarding) en un seul script
-# Utilise le snapshot DB de la phase 1 pour ne pas refaire l'onboarding
+# Ouvre /personal-assistant avec spinner orbital + objectif SMART typewriter
 #
 # Usage: ./scripts/run_swarm_test.sh
 #
@@ -62,7 +62,7 @@ until curl -s http://localhost:5173 > /dev/null 2>&1; do sleep 1; done
 echo "Frontend OK"
 echo ""
 
-# Lancer le test Swarm
+# Lancer le test Swarm (→ /personal-assistant avec spinner + plan SMART)
 python scripts/02_second_step_plan.py
 
 # Le cleanup se fait via le trap

@@ -153,6 +153,7 @@ class SessionManager:
         assistant_name: str | None = None,
         maturity_level: int | None = None,
         onboarding_data: dict | None = None,
+        plan_data: dict | None = None,
     ) -> None:
         """
         Met à jour l'état d'une session en mémoire ET persiste en SQLite.
@@ -162,6 +163,7 @@ class SessionManager:
             assistant_name: Nouveau nom de l'assistant (None = pas de changement)
             maturity_level: Nouveau niveau de maturité (None = pas de changement)
             onboarding_data: Nouvelles données d'onboarding (None = pas de changement)
+            plan_data: Données du plan SMART structuré (None = pas de changement)
         """
         session = self._sessions.get(session_id)
         if session is None:
@@ -173,6 +175,8 @@ class SessionManager:
             session["maturity_level"] = maturity_level
         if onboarding_data is not None:
             session["onboarding_data"] = onboarding_data
+        if plan_data is not None:
+            session["plan_data"] = plan_data
 
         # Persistance SQLite
         db.save_session(

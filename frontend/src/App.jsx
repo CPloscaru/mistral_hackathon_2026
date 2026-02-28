@@ -1,36 +1,46 @@
 /**
  * App - Root component with subdomain-aware persona routing
  *
- * Detects persona from hostname, manages session, and bootstraps chat.
- * Sophie (creator): triggers agent-initiated greeting on mount.
- * Marc: opens directly in assistant mode (no init call).
+ * Routes:
+ * - / → ChatView (onboarding conversation)
+ * - /personal-assistant → PersonalAssistant (spinner + SMART plan)
  */
 
 import { useEffect, useRef } from 'react'
+import { Routes, Route, useNavigate } from 'react-router-dom'
 import { useSubdomain } from './hooks/useSubdomain'
 import { useSession } from './hooks/useSession'
 import { useChat } from './hooks/useChat'
 import ChatView from './components/ChatView'
+import PersonalAssistant from './components/PersonalAssistant'
 
-function App() {
-  const personaConfig = useSubdomain()
-  const { sessionId } = useSession()
-  const chat = useChat()
-
-  const { isOnboarding, persona } = personaConfig
-  const { maturityLevel, initChat } = chat
-
-  // Guard against React StrictMode double-invocation of useEffect
+function OnboardingPage({ personaConfig, sessionId, chat }) {
+  const { persona } = personaConfig
+  const { maturityLevel, initChat, loadHistory } = chat
+  const navigate = useNavigate()
   const initCalledRef = useRef(false)
 
-  // Sophie (creator): auto-trigger agent greeting on first mount
+  // On mount: load history first, then decide whether to initChat
   useEffect(() => {
-    if (persona === 'creator' && maturityLevel === 1 && sessionId) {
-      if (initCalledRef.current) return
-      initCalledRef.current = true
-      initChat(sessionId)
+    if (!sessionId) return
+    if (initCalledRef.current) return
+    initCalledRef.current = true
+
+    async function bootstrap() {
+      const hasHistory = await loadHistory(sessionId)
+      if (!hasHistory && persona === 'creator' && maturityLevel === 1) {
+        initChat(sessionId)
+      }
     }
-    // Only run once on mount
+    bootstrap()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId])
+
+  // Pass navigate to chat hook for redirect on ready_for_plan
+  useEffect(() => {
+    chat.setOnReadyForPlan(() => {
+      navigate(`/personal-assistant?session_id=${sessionId}`)
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId])
 
@@ -40,6 +50,36 @@ function App() {
       sessionId={sessionId}
       chat={chat}
     />
+  )
+}
+
+function App() {
+  const personaConfig = useSubdomain()
+  const { sessionId } = useSession()
+  const chat = useChat()
+
+  return (
+    <Routes>
+      <Route
+        path="/"
+        element={
+          <OnboardingPage
+            personaConfig={personaConfig}
+            sessionId={sessionId}
+            chat={chat}
+          />
+        }
+      />
+      <Route
+        path="/personal-assistant"
+        element={
+          <PersonalAssistant
+            personaConfig={personaConfig}
+            sessionId={sessionId}
+          />
+        }
+      />
+    </Routes>
   )
 }
 
