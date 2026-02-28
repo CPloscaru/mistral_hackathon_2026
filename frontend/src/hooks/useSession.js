@@ -9,7 +9,7 @@ import { useState } from 'react'
 
 /**
  * Build a session key scoped to the current subdomain.
- * Prevents session_id sharing between sophie/lea/marc subdomains
+ * Prevents session_id sharing between sophie/marc subdomains
  * when they share the same registrable domain (localhost).
  */
 function getSessionKey() {

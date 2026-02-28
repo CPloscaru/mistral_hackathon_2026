@@ -17,7 +17,7 @@ import { useState, useCallback } from 'react'
  *
  * Examples:
  *   sophie.localhost:5173 → http://sophie.localhost:8000
- *   lea.localhost:5173    → http://lea.localhost:8000
+ *   marc.localhost:5173   → http://marc.localhost:8000
  *   localhost:5173        → http://localhost:8000 (fallback)
  */
 function buildBackendUrl() {

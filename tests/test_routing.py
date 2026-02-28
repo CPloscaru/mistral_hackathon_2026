@@ -22,39 +22,39 @@ NOMS_AGENTS_ATTENDUS = ["coordinator", "clients", "finances", "planning", "creat
 
 
 @pytest.fixture(scope="module")
-def swarm_freelance():
-    """Retourne un Swarm configuré pour la persona freelance (client HTTP mocké)."""
+def swarm_merchant():
+    """Retourne un Swarm configuré pour la persona merchant (client HTTP mocké)."""
     with patch("mistralai.Mistral") as mock_client:
         mock_client.return_value = MagicMock()
         from backend.agents.factory import create_swarm
-        return create_swarm("freelance", {})
+        return create_swarm("merchant", {})
 
 
-def test_coordinator_est_entry_point(swarm_freelance):
+def test_coordinator_est_entry_point(swarm_merchant):
     """Le coordinateur doit être le point d'entrée du Swarm."""
-    assert swarm_freelance.entry_point is not None
-    assert swarm_freelance.entry_point.name == "coordinator"
+    assert swarm_merchant.entry_point is not None
+    assert swarm_merchant.entry_point.name == "coordinator"
 
 
-def test_swarm_contient_6_agents(swarm_freelance):
+def test_swarm_contient_6_agents(swarm_merchant):
     """Le Swarm doit contenir exactement 6 agents (1 coordinateur + 5 fonctionnels)."""
-    assert len(swarm_freelance.nodes) == 6
+    assert len(swarm_merchant.nodes) == 6
 
 
-def test_agents_ont_bons_modeles(swarm_freelance):
+def test_agents_ont_bons_modeles(swarm_merchant):
     """Chaque agent doit utiliser le modèle Mistral approprié à sa fonction."""
     for nom_agent, modele_attendu in MODELES_ATTENDUS.items():
-        assert nom_agent in swarm_freelance.nodes, f"Agent '{nom_agent}' manquant dans le Swarm"
-        agent = swarm_freelance.nodes[nom_agent].executor
+        assert nom_agent in swarm_merchant.nodes, f"Agent '{nom_agent}' manquant dans le Swarm"
+        agent = swarm_merchant.nodes[nom_agent].executor
         modele_reel = agent.model.get_config()["model_id"]
         assert modele_reel == modele_attendu, (
             f"Agent '{nom_agent}' : modèle attendu '{modele_attendu}', obtenu '{modele_reel}'"
         )
 
 
-def test_conversation_manager_window_40(swarm_freelance):
+def test_conversation_manager_window_40(swarm_merchant):
     """Tous les agents doivent utiliser SlidingWindowConversationManager avec window_size=40."""
-    for nom_agent, node in swarm_freelance.nodes.items():
+    for nom_agent, node in swarm_merchant.nodes.items():
         agent = node.executor
         cm = agent.conversation_manager
         assert isinstance(cm, SlidingWindowConversationManager), (
@@ -65,9 +65,9 @@ def test_conversation_manager_window_40(swarm_freelance):
         )
 
 
-def test_callback_handler_none(swarm_freelance):
+def test_callback_handler_none(swarm_merchant):
     """Tous les agents doivent utiliser null_callback_handler (pas PrintingCallbackHandler)."""
-    for nom_agent, node in swarm_freelance.nodes.items():
+    for nom_agent, node in swarm_merchant.nodes.items():
         agent = node.executor
         cb = agent.callback_handler
         # Quand callback_handler=None est passé au constructeur, Strands utilise null_callback_handler
@@ -77,8 +77,8 @@ def test_callback_handler_none(swarm_freelance):
         )
 
 
-def test_tous_agents_nommes(swarm_freelance):
+def test_tous_agents_nommes(swarm_merchant):
     """Tous les agents doivent avoir les noms corrects."""
-    noms_reels = list(swarm_freelance.nodes.keys())
+    noms_reels = list(swarm_merchant.nodes.keys())
     for nom_attendu in NOMS_AGENTS_ATTENDUS:
         assert nom_attendu in noms_reels, f"Agent '{nom_attendu}' manquant dans le Swarm"

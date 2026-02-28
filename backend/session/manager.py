@@ -39,18 +39,10 @@ class SessionManager:
         """
         Charge les données de seed depuis les fichiers JSON du dossier backend/data/.
 
-        - Léa (freelance) : lea.json — projets, clients, finances
         - Marc (merchant) : marc.json — produits, stock, ventes
         - Sophie (creator) : pas de seed data (démarre avec un espace vide)
         """
-        lea_path = _DATA_DIR / "lea.json"
         marc_path = _DATA_DIR / "marc.json"
-
-        if lea_path.exists():
-            with open(lea_path, "r", encoding="utf-8") as f:
-                self._seed_data["freelance"] = json.load(f)
-        else:
-            self._seed_data["freelance"] = {}
 
         if marc_path.exists():
             with open(marc_path, "r", encoding="utf-8") as f:
@@ -83,7 +75,7 @@ class SessionManager:
 
         Args:
             session_id: Identifiant unique de session (UUID)
-            persona: Type de persona ("creator" | "freelance" | "merchant")
+            persona: Type de persona ("creator" | "merchant")
 
         Returns:
             Dictionnaire de session avec agent, seed_data, etc.
@@ -97,7 +89,7 @@ class SessionManager:
         if db_record is not None:
             # Si la persona stockée ne correspond pas à la persona demandée,
             # ignorer l'enregistrement SQLite pour éviter les cross-subdomain contaminations
-            # (ex: même session_id utilisée sur sophie.localhost puis lea.localhost)
+            # (ex: même session_id utilisée sur sophie.localhost puis marc.localhost)
             if db_record["persona"] != persona:
                 pass  # Fall through to create a new session
             else:

@@ -3,7 +3,7 @@
  *
  * Detects persona from hostname, manages session, and bootstraps chat.
  * Sophie (creator): triggers agent-initiated greeting on mount.
- * Lea/Marc: opens directly in assistant mode (no init call).
+ * Marc: opens directly in assistant mode (no init call).
  */
 
 import { useEffect, useRef } from 'react'

@@ -34,20 +34,9 @@ def test_prompt_merchant_contient_ton_direct():
     assert ton in prompt, "Le ton merchant doit être injecté dans le prompt"
 
 
-def test_prompt_freelance_contient_ton_pro():
-    """Le prompt pour la persona 'freelance' doit contenir des indicateurs de ton professionnel."""
-    prompt = build_system_prompt("planning", "freelance", {})
-    ton = PERSONA_TONES["freelance"]
-    # Le ton doit contenir les mots clés attendus pour Léa
-    assert "professionnel" in ton.lower(), "La tonalité freelance doit mentionner 'professionnel'"
-    assert "structuré" in ton.lower(), "La tonalité freelance doit mentionner 'structuré'"
-    assert "efficace" in ton.lower(), "La tonalité freelance doit mentionner 'efficace'"
-    assert ton in prompt, "Le ton freelance doit être injecté dans le prompt"
-
-
 def test_prompt_contient_tutoiement():
     """Tous les prompts doivent contenir une instruction de tutoiement."""
-    personas = ["creator", "merchant", "freelance"]
+    personas = ["creator", "merchant"]
     agents = ["clients", "finances", "planning", "creation", "activite"]
 
     for persona in personas:
@@ -60,7 +49,7 @@ def test_prompt_contient_tutoiement():
 
 def test_prompt_contient_francais():
     """Tous les prompts doivent contenir une instruction de réponse en français."""
-    personas = ["creator", "merchant", "freelance"]
+    personas = ["creator", "merchant"]
     agents = ["clients", "finances", "planning"]
 
     for persona in personas:
@@ -83,7 +72,7 @@ def test_prompt_clients_contient_seed_data():
             }
         ]
     }
-    prompt = build_system_prompt("clients", "freelance", seed_data)
+    prompt = build_system_prompt("clients", "merchant", seed_data)
     assert "Marie Dubois" in prompt, (
         "Le prompt clients doit inclure le nom des clients du seed data"
     )
@@ -94,7 +83,7 @@ def test_prompt_clients_contient_seed_data():
 
 def test_prompt_coordinator_contient_routing():
     """Le prompt du coordinateur doit contenir des instructions de routage vers les agents."""
-    for persona in ("creator", "merchant", "freelance"):
+    for persona in ("creator", "merchant"):
         prompt = build_coordinator_prompt(persona, {})
         # Le coordinateur doit mentionner handoff_to_agent pour le routage
         assert "handoff_to_agent" in prompt, (

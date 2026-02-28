@@ -81,23 +81,23 @@ class TestSQLitePersist:
         """save_session avec le même session_id met à jour l'enregistrement existant."""
         patched_db.save_session(
             session_id="sess-002",
-            persona="freelance",
+            persona="merchant",
             assistant_name=None,
             maturity_level=1,
             onboarding_data={},
         )
         patched_db.save_session(
             session_id="sess-002",
-            persona="freelance",
-            assistant_name="Lisa",
+            persona="merchant",
+            assistant_name="Andy",
             maturity_level=3,
-            onboarding_data={"nom": "Léa Martin"},
+            onboarding_data={"nom": "Marc Durand"},
         )
         result = patched_db.load_session("sess-002")
 
-        assert result["assistant_name"] == "Lisa"
+        assert result["assistant_name"] == "Andy"
         assert result["maturity_level"] == 3
-        assert result["onboarding_data"] == {"nom": "Léa Martin"}
+        assert result["onboarding_data"] == {"nom": "Marc Durand"}
 
     def test_load_session_onboarding_data_is_dict(self, patched_db):
         """load_session retourne onboarding_data comme dict (pas comme string JSON)."""
@@ -468,7 +468,7 @@ class TestChatInitEndpoint:
 
     @pytest.mark.asyncio
     async def test_init_works_for_non_sophie_persona(self, app_client):
-        """GET /chat/init fonctionne aussi pour les personas non-sophie (lea, marc)."""
+        """GET /chat/init fonctionne aussi pour les personas non-sophie (marc)."""
         import httpx
 
         mock_events = make_fake_swarm_events(["Bienvenue !"])
@@ -477,8 +477,8 @@ class TestChatInitEndpoint:
             mock_swarm = MagicMock()
             mock_swarm.stream_async = MagicMock(return_value=async_iter(mock_events))
             mock_session = {
-                "session_id": "init-lea-sess",
-                "persona": "freelance",
+                "session_id": "init-marc-sess",
+                "persona": "merchant",
                 "seed_data": {},
                 "agent": mock_swarm,
                 "maturity_level": 1,
@@ -490,12 +490,12 @@ class TestChatInitEndpoint:
 
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=app_client),
-                base_url="http://lea.localhost:8000",
+                base_url="http://marc.localhost:8000",
             ) as client:
                 response = await client.get(
                     "/chat/init",
-                    params={"session_id": "init-lea-sess"},
-                    headers={"host": "lea.localhost:8000"},
+                    params={"session_id": "init-marc-sess"},
+                    headers={"host": "marc.localhost:8000"},
                 )
                 assert response.status_code == 200
 

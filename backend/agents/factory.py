@@ -28,7 +28,7 @@ def create_swarm(persona: str, seed_data: dict) -> Swarm:
     - Un SlidingWindowConversationManager dédié par agent
 
     Args:
-        persona: Type de persona ("creator", "freelance", "merchant")
+        persona: Type de persona ("creator", "merchant")
         seed_data: Données de seed de l'utilisateur (peut être vide pour Sophie)
 
     Returns:

@@ -13,12 +13,6 @@ def client():
 
 
 @pytest.fixture
-def lea_headers():
-    """En-têtes HTTP simulant le sous-domaine de Léa (freelance)."""
-    return {"host": "lea.localhost:8000"}
-
-
-@pytest.fixture
 def marc_headers():
     """En-têtes HTTP simulant le sous-domaine de Marc (merchant)."""
     return {"host": "marc.localhost:8000"}

@@ -21,7 +21,6 @@ MODEL_14B = "ministral-14b-2512"
 # Mapping sous-domaine -> type de persona
 SUBDOMAIN_MAP = {
     "sophie": "creator",
-    "lea": "freelance",
     "marc": "merchant",
 }
 
@@ -35,16 +34,6 @@ PERSONA_TONES = {
             "Ton style est inspirant, positif et bienveillant. "
             "Tu l'aides à trouver sa voie et à construire son activité étape par étape. "
             "Tu tutoies toujours Sophie."
-        ),
-    },
-    "freelance": {
-        "name": "Léa",
-        "style": "professionnel mais détendu",
-        "description": (
-            "Tu parles à Léa, une graphiste freelance expérimentée. "
-            "Ton style est direct, efficace et concret. "
-            "Tu l'aides à gérer ses clients, ses finances et son planning au quotidien. "
-            "Tu tutoies toujours Léa."
         ),
     },
     "merchant": {

@@ -9,14 +9,6 @@ from backend.main import app
 client = TestClient(app)
 
 
-def test_lea_subdomain_resout_freelance():
-    """Le sous-domaine 'lea' doit résoudre la persona 'freelance'."""
-    response = client.get("/health", headers={"host": "lea.localhost"})
-    assert response.status_code == 200
-    data = response.json()
-    assert data["persona"] == "freelance"
-
-
 def test_marc_subdomain_resout_merchant():
     """Le sous-domaine 'marc' doit résoudre la persona 'merchant'."""
     response = client.get("/health", headers={"host": "marc.localhost"})
@@ -42,8 +34,8 @@ def test_subdomain_inconnu_defaut_creator():
 
 
 def test_host_avec_port():
-    """Le sous-domaine avec port (lea.localhost:8000) doit résoudre 'freelance'."""
-    response = client.get("/health", headers={"host": "lea.localhost:8000"})
+    """Le sous-domaine avec port (marc.localhost:8000) doit résoudre 'merchant'."""
+    response = client.get("/health", headers={"host": "marc.localhost:8000"})
     assert response.status_code == 200
     data = response.json()
-    assert data["persona"] == "freelance"
+    assert data["persona"] == "merchant"

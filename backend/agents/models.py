@@ -13,7 +13,7 @@ class AgentResponse(BaseModel):
 class SessionState(BaseModel):
     """État complet d'une session utilisateur en mémoire."""
     session_id: str
-    persona: str  # "creator" | "freelance" | "merchant"
+    persona: str  # "creator" | "merchant"
     seed_data: dict
     maturity_level: int = 1  # Niveau d'évolution de la persona (1-4)
     active_widgets: list = []  # Composants UI actifs dans la session

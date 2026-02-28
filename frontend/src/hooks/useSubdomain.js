@@ -3,7 +3,6 @@
  *
  * Maps:
  *   sophie.localhost -> creator persona (onboarding, no pre-set assistant name)
- *   lea.localhost    -> freelance persona (Lisa, female)
  *   marc.localhost   -> merchant persona (Andy, male)
  *   unknown          -> defaults to sophie (creator)
  */
@@ -15,13 +14,6 @@ const PERSONA_MAP = {
     assistantGender: null,
     isOnboarding: true,
     avatarEmoji: null,
-  },
-  lea: {
-    persona: 'freelance',
-    assistantName: 'Lisa',
-    assistantGender: 'female',
-    isOnboarding: false,
-    avatarEmoji: '👩',
   },
   marc: {
     persona: 'merchant',

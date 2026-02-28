@@ -26,10 +26,10 @@ def gestionnaire_session():
 def test_creation_session(gestionnaire_session):
     """Une nouvelle session doit être créée avec la persona correcte."""
     session_id = str(uuid.uuid4())
-    session = gestionnaire_session.get_or_create_session(session_id, "freelance")
+    session = gestionnaire_session.get_or_create_session(session_id, "merchant")
 
     assert session["session_id"] == session_id
-    assert session["persona"] == "freelance"
+    assert session["persona"] == "merchant"
     assert session["maturity_level"] == 1
     assert isinstance(session["active_widgets"], list)
 
@@ -38,16 +38,16 @@ def test_session_persistance(gestionnaire_session):
     """Deux appels avec le même session_id doivent retourner le même objet."""
     session_id = str(uuid.uuid4())
 
-    session1 = gestionnaire_session.get_or_create_session(session_id, "freelance")
-    session2 = gestionnaire_session.get_or_create_session(session_id, "freelance")
+    session1 = gestionnaire_session.get_or_create_session(session_id, "merchant")
+    session2 = gestionnaire_session.get_or_create_session(session_id, "merchant")
 
     assert session1 is session2
 
 
-def test_session_lea_avec_seed_data(gestionnaire_session):
-    """La session Léa (freelance) doit contenir des données de seed non vides."""
+def test_session_marc_avec_seed_data(gestionnaire_session):
+    """La session Marc (merchant) doit contenir des données de seed non vides."""
     session_id = str(uuid.uuid4())
-    session = gestionnaire_session.get_or_create_session(session_id, "freelance")
+    session = gestionnaire_session.get_or_create_session(session_id, "merchant")
 
     assert session["seed_data"] != {}
     assert len(session["seed_data"]) > 0

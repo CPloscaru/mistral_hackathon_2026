@@ -37,7 +37,6 @@ Les agents sont organisés par **fonction métier**, pas par persona. La personn
 La persona ne change pas l'agent, elle change le **ton** :
 - **Sophie (Creator)** : fun, créatif, emojis, parle comme un ami créatif
 - **Marc (Merchant)** : chaleureux, direct, pratique, parle comme un associé de confiance
-- **Léa (Freelance)** : professionnel, structuré, efficace, parle comme un assistant de direction
 
 Chaque agent reçoit dans son system prompt :
 1. Sa spécialisation fonctionnelle (ce qu'il sait faire)
@@ -68,7 +67,6 @@ Chaque persona a son propre **sous-domaine local**, comme si c'était un espace 
 | Sous-domaine | Persona | Mode | État initial |
 |-------------|---------|------|-------------|
 | `sophie.localhost` | Sophie | **Onboarding** | Espace vierge — l'agent guide Sophie avec des questions pour configurer son espace |
-| `lea.localhost` | Léa | **Quotidien** | Espace pré-configuré avec seed data — assistant au jour le jour |
 | `marc.localhost` | Marc | **Quotidien** | Espace pré-configuré avec seed data — assistant commerçant |
 
 ### Onboarding piloté par l'agent (Sophie uniquement)
@@ -85,20 +83,19 @@ Sur `sophie.localhost`, l'agent **initie la conversation**. C'est lui qui commen
 
 ### Espaces pré-configurés (Léa et Marc)
 
-Sur `lea.localhost` et `marc.localhost`, tout est déjà en place :
-- Seed data chargée (clients, projets/stock, finances, calendrier)
+Sur `marc.localhost`, tout est déjà en place :
+- Seed data chargée (clients, stock, finances, calendrier)
 - L'agent connaît déjà l'utilisateur
 - On montre directement l'utilisation au quotidien
 
-## 3 Personas de démo
+## 2 Personas de démo
 
 | # | Persona | Sous-domaine | Ce qu'on démontre |
 |---|---------|-------------|------------------|
 | 1 | **Sophie** | `sophie.localhost` | Onboarding guidé par l'agent → checklist de lancement → accompagnement progressif → évolution de la persona |
-| 2 | **Léa** | `lea.localhost` | Assistant quotidien — relances, planning, rédaction, suivi de projets |
-| 3 | **Marc** | `marc.localhost` | Assistant commerçant — stock, clients, fournisseurs, planning production |
+| 2 | **Marc** | `marc.localhost` | Assistant commerçant — stock, clients, fournisseurs, planning production |
 
-**Ordre de démo :** Sophie (wow du "l'IA me prend par la main") → Léa (wow du "l'IA gère mon quotidien") → Marc (wow du "même outil, besoins totalement différents")
+**Ordre de démo :** Sophie (wow du "l'IA me prend par la main") → Marc (wow du "l'IA gère mon quotidien, même outil, besoin totalement différent")
 
 ## Persona évolutive — niveaux de maturité
 
@@ -114,14 +111,6 @@ Pour le MVP, les transitions sont **scriptées** (détection par mots-clés dans
 | 2 | **En cours** | Guide — aide sur les premiers contenus | "J'ai créé mon auto-entreprise" / "J'ai mon Instagram" | Premiers contenus, compte créé |
 | 3 | **Active** | Assistant — gestion collabs, analytics | "J'ai mes premiers abonnés" / "J'ai une collab" | Collabs, contenus publiés, quelques clients |
 | 4 | **Avancée** | Stratège — scaling, diversification | "J'ai 1000 abonnés" / "Je veux scaler" | Données riches (= seed data complète actuelle) |
-
-### Léa (Freelance) — 3 niveaux
-
-| Niveau | Nom | L'IA agit comme... | Déclencheur (scripté) | Seed data |
-|--------|-----|---------------------|----------------------|-----------|
-| 1 | **Junior** | Guide — aide à structurer son activité | Si détecté pendant onboarding | Quelques projets, peu de clients |
-| 2 | **Active** | Assistant quotidien — exécution, relances | État par défaut (démo) | Projets en cours, clients, factures |
-| 3 | **Sénior** | Stratège — croissance, recrutement, délégation | "Je veux embaucher" / "Trop de projets" | Pipeline chargé, CA élevé |
 
 ### Marc (Merchant) — 3 niveaux
 
@@ -144,8 +133,7 @@ Le niveau de maturité est stocké dans la session et injecté dans le system pr
 2. Sophie répond aux questions → l'agent configure l'espace progressivement → checklist de lancement
 3. Sophie avance → "J'ai créé mon auto-entreprise" → **transition niveau 2** → l'IA propose maintenant des idées de premiers contenus
 4. On montre que l'assistant évolue AVEC l'utilisateur
-5. **`lea.localhost`** → Espace déjà riche → "Mes factures en retard ?" → réponse immédiate avec les vraies données
-6. **`marc.localhost`** → "Mon stock de baguettes ?" → réponse adaptée au commerce de proximité
+5. **`marc.localhost`** → Espace déjà riche → "Mon stock de baguettes ?" → réponse immédiate avec les vraies données
 
 ## Le moment clé : le morphing
 

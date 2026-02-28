@@ -69,7 +69,7 @@ SCENARIO = [
             "J'utilise un tableur Excel et je perds tout."
         ),
         "checks": [],
-        "description": "Turn 5 — Agent propose un plan personnalisé + [ONBOARDING_COMPLETE]",
+        "description": "Turn 5 — Agent produit le résumé + Swarm lance le plan + [ONBOARDING_COMPLETE]",
     },
 ]
 

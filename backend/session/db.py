@@ -63,7 +63,7 @@ def save_session(
 
     Args:
         session_id: Identifiant unique de session (UUID)
-        persona: Type de persona ("creator" | "freelance" | "merchant")
+        persona: Type de persona ("creator" | "merchant")
         assistant_name: Nom choisi par l'utilisateur pour l'agent (peut être None)
         maturity_level: Niveau de maturité actuel (1-4)
         onboarding_data: Données collectées durant l'onboarding (sérialisées en JSON)
