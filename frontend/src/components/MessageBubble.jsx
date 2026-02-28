@@ -8,7 +8,19 @@
  * - Assistant: grey background, left-aligned, flat bottom-left corner
  * - Streaming: cursor blink at end of text
  * - Fade-in animation on appearance
+ * - Lightweight markdown: **bold**, *italic*, newlines
  */
+
+function parseMarkdown(text) {
+  if (!text) return ''
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/\n/g, '<br/>')
+}
 
 function MessageBubble({ message }) {
   const isUser = message.role === 'user'
@@ -26,9 +38,10 @@ function MessageBubble({ message }) {
 
   return (
     <div className={rowClass}>
-      <div className={bubbleClass}>
-        {message.content}
-      </div>
+      <div
+        className={bubbleClass}
+        dangerouslySetInnerHTML={{ __html: parseMarkdown(message.content) }}
+      />
     </div>
   )
 }
