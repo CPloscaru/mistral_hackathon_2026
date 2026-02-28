@@ -2,7 +2,14 @@
 Point d'entrée de l'application Kameleon.
 Lance le serveur FastAPI avec les routes et middlewares configurés.
 """
+import logging
 import uvicorn
+
+logging.basicConfig(level=logging.INFO)
+logging.getLogger("kameleon.swarm").setLevel(logging.INFO)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("strands").setLevel(logging.WARNING)
+logging.getLogger("kameleon.swarm").setLevel(logging.INFO)
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 

@@ -1,8 +1,10 @@
 /**
- * useSession - Manages session ID persistence across page refreshes
+ * useSession - Manages session ID persistence
  *
- * Uses sessionStorage to persist session_id within the browser tab.
- * Generates a new UUID v4 if none exists.
+ * Priority:
+ * 1. ?session_id=XXX in URL (for test scripts / deep links)
+ * 2. sessionStorage (persists within the browser tab)
+ * 3. New UUID v4 (first visit)
  */
 
 import { useState } from 'react'
@@ -19,9 +21,19 @@ function getSessionKey() {
 }
 
 function getOrCreateSessionId() {
+  // 1. URL query param (highest priority)
+  const params = new URLSearchParams(window.location.search)
+  const fromUrl = params.get('session_id')
+  if (fromUrl) {
+    sessionStorage.setItem(getSessionKey(), fromUrl)
+    return fromUrl
+  }
+
+  // 2. sessionStorage (tab persistence)
   const SESSION_KEY = getSessionKey()
   let sessionId = sessionStorage.getItem(SESSION_KEY)
   if (!sessionId) {
+    // 3. New UUID
     sessionId = crypto.randomUUID()
     sessionStorage.setItem(SESSION_KEY, sessionId)
   }

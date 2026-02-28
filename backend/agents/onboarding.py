@@ -6,10 +6,14 @@ Phase 1 : Agent conversationnel (Mistral Large) — guide la conversation,
 Phase 2 : Swarm one-shot (profiler + recherche + expert_fr) — lancé une seule fois
            quand l'Agent a collecté assez d'infos, produit le plan final.
 """
+import logging
+
 from strands import Agent
 from strands.models.mistral import MistralModel
 from strands.multiagent import Swarm
 from strands.agent.conversation_manager import SlidingWindowConversationManager
+
+logger = logging.getLogger("kameleon.swarm")
 
 from backend.config import (
     MISTRAL_API,
@@ -46,6 +50,19 @@ def create_onboarding_agent() -> Agent:
     )
 
 
+def _swarm_debug_callback(**kwargs):
+    """Callback de debug pour les agents du Swarm — log seulement les événements importants."""
+    if kwargs.get("force_stop", False):
+        logger.warning("🛑 FORCE-STOPPED: %s", kwargs.get("force_stop_reason", "unknown"))
+    elif "result" in kwargs:
+        logger.info("✅ Agent completed")
+    elif kwargs.get("complete", False):
+        logger.info("📦 Generation complete")
+
+    if "current_tool_use" in kwargs and kwargs["current_tool_use"].get("name"):
+        logger.info("🔧 Tool: %s", kwargs["current_tool_use"]["name"])
+
+
 def create_onboarding_swarm() -> Swarm:
     """
     Swarm one-shot pour le traitement final de l'onboarding.
@@ -62,9 +79,10 @@ def create_onboarding_swarm() -> Swarm:
         model=MistralModel(
             model_id=MODEL_8B,
             api_key=MISTRAL_API,
+            max_tokens=4096,
         ),
         system_prompt=ONBOARDING_PROFILER_PROMPT,
-        callback_handler=None,
+        callback_handler=_swarm_debug_callback,
         conversation_manager=SlidingWindowConversationManager(window_size=40),
     )
 
@@ -73,10 +91,11 @@ def create_onboarding_swarm() -> Swarm:
         model=MistralModel(
             model_id=MODEL_14B,
             api_key=MISTRAL_API,
+            max_tokens=4096,
         ),
         system_prompt=ONBOARDING_RECHERCHE_PROMPT,
         tools=[web_search],
-        callback_handler=None,
+        callback_handler=_swarm_debug_callback,
         conversation_manager=SlidingWindowConversationManager(window_size=40),
     )
 
@@ -85,9 +104,10 @@ def create_onboarding_swarm() -> Swarm:
         model=MistralModel(
             model_id=MODEL_8B,
             api_key=MISTRAL_API,
+            max_tokens=4096,
         ),
         system_prompt=ONBOARDING_EXPERT_FR_PROMPT,
-        callback_handler=None,
+        callback_handler=_swarm_debug_callback,
         conversation_manager=SlidingWindowConversationManager(window_size=40),
     )
 

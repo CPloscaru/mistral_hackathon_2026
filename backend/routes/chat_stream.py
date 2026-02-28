@@ -42,17 +42,30 @@ async def _stream_swarm(swarm, message: str, session: dict):
 
     Détecte [ONBOARDING_COMPLETE] pour émettre maturity_update.
     """
+    import logging
+    logger = logging.getLogger("kameleon.swarm")
+
     session_id = session["session_id"]
+    token_count = 0
+
+    full_text = ""
 
     async for event in swarm.stream_async(message):
         event_type = event.get("type")
 
-        if event_type == "multiagent_node_stream":
+        if event_type == "multiagent_node_start":
+            node_id = event.get("node_id", "?")
+            logger.info("▶️ Swarm node started: %s", node_id)
+
+        elif event_type == "multiagent_node_stream":
             inner = event.get("event", {})
             raw_data = inner.get("data", "")
 
             if not raw_data or not raw_data.strip():
                 continue
+
+            token_count += 1
+            full_text += raw_data
 
             if ONBOARDING_SENTINEL in raw_data:
                 clean_text = raw_data.replace(ONBOARDING_SENTINEL, "").strip()
@@ -63,6 +76,7 @@ async def _stream_swarm(swarm, message: str, session: dict):
                     session_id=session_id,
                     maturity_level=new_level,
                 )
+                logger.info("ONBOARDING_COMPLETE detected, maturity %d→%d", current_level, new_level)
 
                 if clean_text:
                     yield {"data": clean_text, "event": "token"}
@@ -75,6 +89,12 @@ async def _stream_swarm(swarm, message: str, session: dict):
                 yield {"data": raw_data, "event": "token"}
 
         elif event_type == "multiagent_result":
+            has_sentinel = ONBOARDING_SENTINEL in full_text
+            logger.info(
+                "📊 Swarm DONE — %d tokens, %d chars, sentinel=%s, last 100: ...%s",
+                token_count, len(full_text), has_sentinel,
+                full_text[-100:].replace("\n", "\\n"),
+            )
             yield {
                 "data": json.dumps(
                     {
@@ -85,6 +105,16 @@ async def _stream_swarm(swarm, message: str, session: dict):
                 ),
                 "event": "done",
             }
+
+        else:
+            # Log tout type d'événement inattendu
+            logger.info("❓ Swarm event non géré: type=%s keys=%s", event_type, list(event.keys()))
+
+    # Fin de la boucle — si on arrive ici sans multiagent_result, c'est un problème
+    logger.info(
+        "🏁 _stream_swarm loop ended — %d tokens, %d chars, sentinel_found=%s",
+        token_count, len(full_text), ONBOARDING_SENTINEL in full_text,
+    )
 
 
 async def _event_generator(session: dict, message: str):
@@ -202,6 +232,26 @@ async def _event_generator(session: dict, message: str):
             "data": json.dumps({"error": str(exc)}, ensure_ascii=False),
             "event": "error",
         }
+
+
+@router.post("/chat/inject-onboarding")
+async def inject_onboarding(request: Request, body: dict):
+    """
+    Endpoint de test : injecte onboarding_data dans la session en mémoire + SQLite.
+    Permet au script 02_second_step_plan.py de déclencher le Swarm sans refaire l'onboarding.
+    """
+    session_id = body.get("session_id")
+    profile = body.get("profile", {})
+
+    session = session_manager.get_session(session_id)
+    if session is None:
+        return {"error": "Session introuvable"}
+
+    session_manager.update_session_state(
+        session_id=session_id,
+        onboarding_data=profile,
+    )
+    return {"ok": True, "session_id": session_id}
 
 
 @router.post("/chat/stream")

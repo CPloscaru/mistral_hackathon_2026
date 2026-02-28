@@ -105,6 +105,7 @@ class SessionManager:
                     "maturity_level": db_record["maturity_level"],
                     "active_widgets": [],
                     "assistant_name": db_record["assistant_name"],
+                    "onboarding_data": db_record.get("onboarding_data", {}),
                 }
                 self._sessions[session_id] = session
                 return session

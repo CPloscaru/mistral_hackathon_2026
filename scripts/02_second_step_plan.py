@@ -72,23 +72,27 @@ def get_last_assistant_message() -> str:
     ).strip()
 
 
-def wait_for_response(prev_msg: str = "", timeout: int = 120) -> str:
+def wait_for_response(prev_msg: str = "", timeout: int = 180) -> str:
     """
     Poll le DOM : attend qu'un nouveau message assistant apparaisse
-    (différent de prev_msg) et que le typing-indicator disparaisse.
+    (différent de prev_msg) et que le streaming soit terminé.
+
+    Vérifie .message-bubble--streaming (pas .typing-indicator-row,
+    qui disparaît dès les premiers tokens).
     """
     start = time.time()
-    time.sleep(2)
+    time.sleep(3)
 
     while time.time() - start < timeout:
-        still_typing = pw_eval(
-            "!!document.querySelector('.typing-indicator-row')"
+        # Vérifie si un message est encore en cours de streaming
+        still_streaming = pw_eval(
+            "!!document.querySelector('.message-bubble--streaming')"
         )
-        if still_typing == "false":
+        if still_streaming == "false":
             text = get_last_assistant_message()
             if text and text != prev_msg:
                 return text
-        time.sleep(1)
+        time.sleep(2)
 
     text = get_last_assistant_message()
     if text and text != prev_msg:
@@ -97,13 +101,21 @@ def wait_for_response(prev_msg: str = "", timeout: int = 120) -> str:
 
 
 def send_message_browser(text: str):
-    """Tape un message dans le chat et clique Envoyer."""
-    pw("snapshot > /dev/null 2>&1")
-    safe_text = text.replace('"', '\\"')
-    pw(f'fill e17 "{safe_text}"')
+    """Tape un message dans le chat via JS (indépendant des refs playwright)."""
+    safe_text = text.replace("'", "\\'").replace("\n", "\\n")
+    # Remplir le textarea via React-compatible value setter
+    pw_eval(
+        f"(()=>{{const ta=document.querySelector('textarea[aria-label=\"Votre message\"]');"
+        f"const set=Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set;"
+        f"set.call(ta,'{safe_text}');"
+        f"ta.dispatchEvent(new Event('input',{{bubbles:true}}));"
+        f"ta.dispatchEvent(new Event('change',{{bubbles:true}}))}})()"
+    )
     time.sleep(0.3)
-    pw("snapshot > /dev/null 2>&1")
-    pw("click e19")
+    # Cliquer le bouton Envoyer
+    pw_eval(
+        "document.querySelector('button[aria-label=\"Envoyer\"]').click()"
+    )
 
 
 # ─── DB helpers ────────────────────────────────────────────────────
@@ -172,16 +184,40 @@ def get_latest_creator_session_id() -> str | None:
 
 def inject_onboarding_data(session_id: str, profile: dict):
     """
-    Injecte le profil JSON dans la session SQLite pour déclencher le Swarm.
+    Injecte le profil JSON dans la session via l'API backend.
+    Cela met à jour à la fois la mémoire et SQLite.
     """
-    conn = sqlite3.connect(str(DB_PATH), timeout=5)
-    conn.execute(
-        "UPDATE sessions SET onboarding_data = ? WHERE session_id = ?",
-        (json.dumps(profile, ensure_ascii=False), session_id),
+    import urllib.request
+
+    payload = json.dumps(
+        {"session_id": session_id, "profile": profile},
+        ensure_ascii=False,
+    ).encode("utf-8")
+
+    req = urllib.request.Request(
+        "http://sophie.localhost:8000/chat/inject-onboarding",
+        data=payload,
+        headers={"Content-Type": "application/json", "Host": "sophie.localhost:8000"},
+        method="POST",
     )
-    conn.commit()
-    conn.close()
-    print(f"  onboarding_data injecté pour session: {session_id}")
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            result = json.loads(resp.read())
+            if result.get("ok"):
+                print(f"  onboarding_data injecté via API pour session: {session_id}")
+            else:
+                print(f"  ERREUR API: {result}")
+    except Exception as e:
+        print(f"  ERREUR injection API: {e}")
+        # Fallback : injection directe SQLite
+        conn = sqlite3.connect(str(DB_PATH), timeout=5)
+        conn.execute(
+            "UPDATE sessions SET onboarding_data = ? WHERE session_id = ?",
+            (json.dumps(profile, ensure_ascii=False), session_id),
+        )
+        conn.commit()
+        conn.close()
+        print(f"  Fallback: onboarding_data injecté via SQLite pour session: {session_id}")
 
 
 def check_maturity_level(session_id: str) -> int | None:
@@ -233,7 +269,7 @@ def get_session_state(session_id: str) -> dict:
 def run():
     print("=" * 60)
     print(" ONBOARDING SOPHIE — Phase 2 (Swarm one-shot plan SMART)")
-    print(" Lit profile.json → injecte en session → Swarm produit plan")
+    print(" Crée session en DB → ouvre navigateur → Swarm produit plan")
     print("=" * 60)
 
     # 1. Trouver le profil du dernier run 01
@@ -253,90 +289,76 @@ def run():
     RUN_DIR.mkdir(parents=True, exist_ok=True)
     print(f"\n3. Run dir: {RUN_DIR}")
 
-    # 4. Ouvrir le navigateur sur sophie.localhost:5173
-    print("\n4. Ouverture du navigateur...")
-    pw("open http://sophie.localhost:5173 --browser chrome --headed")
-
-    # 5. Attendre le message d'init de l'Agent
-    print("\n5. Attente du message d'init de l'Agent...")
-    agent_init_msg = wait_for_response(timeout=30)
-    if agent_init_msg == "[TIMEOUT]":
-        print("  ERREUR: Timeout en attente du message d'init")
-        restore_db()
-        sys.exit(1)
-    print(f"  Agent init: {agent_init_msg[:200]}...")
-
-    # 6. Lire le session_id créé par le frontend (nouvelle session)
-    print("\n6. Récupération du session_id de la nouvelle session...")
-    time.sleep(1)  # Laisser le backend créer la session en SQLite
-    session_id = get_latest_creator_session_id()
-    if not session_id:
-        print("  ERREUR: Aucune session creator trouvée en DB")
-        restore_db()
-        sys.exit(1)
+    # 4. Créer la session en DB avec le profil d'onboarding pré-injecté
+    import uuid
+    session_id = str(uuid.uuid4())
+    print(f"\n4. Pré-création de la session en DB...")
+    conn = sqlite3.connect(str(DB_PATH), timeout=5)
+    conn.execute(
+        "INSERT OR REPLACE INTO sessions "
+        "(session_id, persona, assistant_name, maturity_level, onboarding_data) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (session_id, "creator", "Andy", 1, json.dumps(profile, ensure_ascii=False)),
+    )
+    conn.commit()
+    conn.close()
     print(f"  session_id: {session_id}")
+    print(f"  onboarding_data pré-injecté ({len(json.dumps(profile))} chars)")
 
-    # 7. Injecter le profil dans la session SQLite
-    print("\n7. Injection du profil d'onboarding dans la session...")
-    inject_onboarding_data(session_id, profile)
+    # 5. Ouvrir le navigateur avec ?session_id=XXX
+    #    Le frontend lit le query param → utilise notre session_id
+    #    Le backend charge la session depuis SQLite → voit onboarding_data → swap au Swarm
+    print("\n5. Ouverture du navigateur...")
+    pw(f"open http://sophie.localhost:5173?session_id={session_id} --browser chrome --headed")
 
-    # 8. Envoyer un message déclencheur — le backend détecte onboarding_data → Swarm
-    print("\n8. Déclenchement du Swarm (message 'c'est parti !')...")
-    prev_msg = agent_init_msg
-    send_message_browser("c'est parti !")
-
-    # 9. Attendre la réponse du Swarm (plan SMART — peut être long)
-    print("\n9. Attente du plan SMART (Swarm — jusqu'à 120s)...")
-    plan_text = wait_for_response(prev_msg=prev_msg, timeout=180)
+    # 6. Attendre la réponse du Swarm (plan SMART — peut être long)
+    print("\n6. Attente du plan SMART (Swarm — jusqu'à 180s)...")
+    plan_text = wait_for_response(prev_msg="", timeout=180)
 
     if plan_text == "[TIMEOUT]":
         print("  ERREUR: Timeout en attente du plan Swarm")
-        # Sauvegarder quand même ce qu'on a
         plan_text = get_last_assistant_message() or "[TIMEOUT]"
 
     print(f"\n  Plan reçu ({len(plan_text)} chars):")
     print(f"  {plan_text[:500]}{'...' if len(plan_text) > 500 else ''}")
 
-    # 10. Vérifier [ONBOARDING_COMPLETE] (ne doit PAS apparaître dans le DOM)
-    print("\n10. Vérification: [ONBOARDING_COMPLETE] absent du DOM...")
+    # 7. Vérifier [ONBOARDING_COMPLETE] (ne doit PAS apparaître dans le DOM)
+    print("\n7. Vérification: [ONBOARDING_COMPLETE] absent du DOM...")
     sentinel_visible = "[ONBOARDING_COMPLETE]" in plan_text
     if sentinel_visible:
         print("  ERREUR: [ONBOARDING_COMPLETE] visible dans le DOM !")
     else:
         print("  OK: sentinel absent du texte visible")
 
-    # 11. Vérifier le maturity_level en DB
-    print("\n11. Vérification du maturity_level...")
+    # 8. Vérifier le maturity_level en DB
+    print("\n8. Vérification du maturity_level...")
     maturity = check_maturity_level(session_id)
     if maturity == 2:
         print(f"  OK: maturity_level = {maturity} (transition 1→2 réussie)")
     else:
         print(f"  AVERTISSEMENT: maturity_level = {maturity} (attendu: 2)")
 
-    # 12. Sauvegarder les résultats
-    print("\n12. Sauvegarde des résultats...")
+    # 9. Sauvegarder les résultats
+    print("\n9. Sauvegarde des résultats...")
 
-    # plan.txt
     plan_path = RUN_DIR / "plan.txt"
     with open(plan_path, "w", encoding="utf-8") as f:
         f.write(plan_text)
     print(f"  Plan: {plan_path}")
 
-    # profile_input.json
     profile_path = RUN_DIR / "profile_input.json"
     with open(profile_path, "w", encoding="utf-8") as f:
         json.dump(profile, f, ensure_ascii=False, indent=2)
     print(f"  Profil input: {profile_path}")
 
-    # session_state.json
     session_state = get_session_state(session_id)
     state_path = RUN_DIR / "session_state.json"
     with open(state_path, "w", encoding="utf-8") as f:
         json.dump(session_state, f, ensure_ascii=False, indent=2)
     print(f"  État session: {state_path}")
 
-    # 13. Restaurer le snapshot DB (pour pouvoir relancer)
-    print("\n13. Restauration du snapshot DB...")
+    # 10. Restaurer le snapshot DB (pour pouvoir relancer)
+    print("\n10. Restauration du snapshot DB...")
     restore_db()
 
     print(f"\n{'=' * 60}")
