@@ -1,0 +1,10 @@
+.env
+.playwright/
+.doc/
+.tmp/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
