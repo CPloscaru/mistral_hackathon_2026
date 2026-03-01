@@ -1,0 +1,59 @@
+[
+  {
+    "numero": "FAC-2026-001",
+    "client": { "nom": "Startup GreenTech", "email": "contact@greentech.fr", "secteur": "Tech / Environnement" },
+    "montant": 1800.00,
+    "date_emission": "2026-01-15",
+    "date_echeance": "2026-01-30",
+    "statut": "payee",
+    "items": [
+      { "description": "Création logo + charte graphique", "quantite": 1, "prix_unitaire": 1800.00 }
+    ]
+  },
+  {
+    "numero": "FAC-2026-002",
+    "client": { "nom": "Boulangerie Duval", "email": "duval@boulangerie.fr", "secteur": "Artisanat / Alimentation" },
+    "montant": 650.00,
+    "date_emission": "2026-02-01",
+    "date_echeance": "2026-02-15",
+    "statut": "payee",
+    "items": [
+      { "description": "Refonte menu et cartes de visite", "quantite": 1, "prix_unitaire": 450.00 },
+      { "description": "Adaptation format réseaux sociaux", "quantite": 1, "prix_unitaire": 200.00 }
+    ]
+  },
+  {
+    "numero": "FAC-2026-003",
+    "client": { "nom": "Cabinet Moreau Avocats", "email": "secretariat@moreau-avocats.fr", "secteur": "Juridique" },
+    "montant": 2400.00,
+    "date_emission": "2026-02-10",
+    "date_echeance": "2026-03-10",
+    "statut": "en_attente",
+    "items": [
+      { "description": "Refonte site web complet (maquettes + intégration)", "quantite": 1, "prix_unitaire": 2400.00 }
+    ]
+  },
+  {
+    "numero": "FAC-2026-004",
+    "client": { "nom": "Startup GreenTech", "email": "contact@greentech.fr", "secteur": "Tech / Environnement" },
+    "montant": 950.00,
+    "date_emission": "2026-01-20",
+    "date_echeance": "2026-02-05",
+    "statut": "en_retard",
+    "items": [
+      { "description": "Kit réseaux sociaux — 10 visuels Instagram", "quantite": 10, "prix_unitaire": 95.00 }
+    ]
+  },
+  {
+    "numero": "FAC-2026-005",
+    "client": { "nom": "Association Les Petits Pas", "email": "contact@lespetitspas.org", "secteur": "Associatif / Social" },
+    "montant": 500.00,
+    "date_emission": "2026-02-20",
+    "date_echeance": "2026-03-20",
+    "statut": "en_attente",
+    "items": [
+      { "description": "Affiche événement annuel A3", "quantite": 1, "prix_unitaire": 300.00 },
+      { "description": "Flyer recto-verso", "quantite": 1, "prix_unitaire": 200.00 }
+    ]
+  }
+]
