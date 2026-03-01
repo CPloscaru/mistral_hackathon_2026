@@ -11,11 +11,12 @@ DB_PATH = str(Path(__file__).resolve().parent.parent.parent / "kameleon.db")
 
 _CREATE_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS sessions (
-    session_id      TEXT PRIMARY KEY,
-    persona         TEXT NOT NULL,
-    assistant_name  TEXT,
-    maturity_level  INTEGER DEFAULT 1,
-    onboarding_data TEXT DEFAULT '{}'
+    session_id        TEXT PRIMARY KEY,
+    persona           TEXT NOT NULL,
+    assistant_name    TEXT,
+    maturity_level    INTEGER DEFAULT 1,
+    onboarding_data   TEXT DEFAULT '{}',
+    active_components TEXT DEFAULT '[]'
 )
 """
 
@@ -56,6 +57,15 @@ CREATE TABLE IF NOT EXISTS calendar_events (
 )
 """
 
+_CREATE_BUDGET_DATA_SQL = """
+CREATE TABLE IF NOT EXISTS budget_data (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL UNIQUE,
+    data TEXT NOT NULL,
+    FOREIGN KEY (session_id) REFERENCES sessions(session_id)
+)
+"""
+
 _CREATE_CRM_CLIENTS_SQL = """
 CREATE TABLE IF NOT EXISTS crm_clients (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -89,17 +99,18 @@ CREATE TABLE IF NOT EXISTS crm_factures (
 """
 
 _UPSERT_SQL = """
-INSERT INTO sessions (session_id, persona, assistant_name, maturity_level, onboarding_data)
-VALUES (?, ?, ?, ?, ?)
+INSERT INTO sessions (session_id, persona, assistant_name, maturity_level, onboarding_data, active_components)
+VALUES (?, ?, ?, ?, ?, ?)
 ON CONFLICT(session_id) DO UPDATE SET
-    persona         = excluded.persona,
-    assistant_name  = excluded.assistant_name,
-    maturity_level  = excluded.maturity_level,
-    onboarding_data = excluded.onboarding_data
+    persona           = excluded.persona,
+    assistant_name    = excluded.assistant_name,
+    maturity_level    = excluded.maturity_level,
+    onboarding_data   = excluded.onboarding_data,
+    active_components = excluded.active_components
 """
 
 _SELECT_SQL = """
-SELECT session_id, persona, assistant_name, maturity_level, onboarding_data
+SELECT session_id, persona, assistant_name, maturity_level, onboarding_data, active_components
 FROM sessions
 WHERE session_id = ?
 """
@@ -120,8 +131,14 @@ def init_db() -> None:
         conn.execute(_CREATE_MESSAGES_TABLE_SQL)
         conn.execute(_CREATE_ADMIN_CHECKLIST_SQL)
         conn.execute(_CREATE_CALENDAR_EVENTS_SQL)
+        conn.execute(_CREATE_BUDGET_DATA_SQL)
         conn.execute(_CREATE_CRM_CLIENTS_SQL)
         conn.execute(_CREATE_CRM_FACTURES_SQL)
+        # Migration : ajouter active_components si absente (DB existante)
+        try:
+            conn.execute("ALTER TABLE sessions ADD COLUMN active_components TEXT DEFAULT '[]'")
+        except sqlite3.OperationalError:
+            pass  # colonne existe déjà
         conn.commit()
 
 
@@ -131,6 +148,7 @@ def save_session(
     assistant_name: str | None,
     maturity_level: int,
     onboarding_data: dict,
+    active_components: list | None = None,
 ) -> None:
     """
     Insère ou met à jour une session dans SQLite (upsert).
@@ -141,10 +159,12 @@ def save_session(
         assistant_name: Nom choisi par l'utilisateur pour l'agent (peut être None)
         maturity_level: Niveau de maturité actuel (1-4)
         onboarding_data: Données collectées durant l'onboarding (sérialisées en JSON)
+        active_components: Composants UI actifs (sérialisés en JSON)
     """
     onboarding_json = json.dumps(onboarding_data or {}, ensure_ascii=False)
+    components_json = json.dumps(active_components or [], ensure_ascii=False)
     with _connect() as conn:
-        conn.execute(_UPSERT_SQL, (session_id, persona, assistant_name, maturity_level, onboarding_json))
+        conn.execute(_UPSERT_SQL, (session_id, persona, assistant_name, maturity_level, onboarding_json, components_json))
         conn.commit()
 
 
@@ -208,6 +228,7 @@ def load_session(session_id: str) -> dict | None:
         "assistant_name": row[2],
         "maturity_level": row[3],
         "onboarding_data": json.loads(row[4] or "{}"),
+        "active_components": json.loads(row[5] or "[]") if len(row) > 5 else [],
     }
 
 
@@ -284,6 +305,35 @@ def load_calendar_events(session_id: str) -> list[dict]:
         {"id": r[0], "date": r[1], "titre": r[2], "description": r[3], "type": r[4], "done": bool(r[5])}
         for r in rows
     ]
+
+
+# =====================================================
+# CRUD — Budget Data
+# =====================================================
+
+def save_budget_data(session_id: str, budget_data: dict) -> None:
+    """Persiste le budget prévisionnel (upsert — remplace l'existant pour la session)."""
+    data_json = json.dumps(budget_data, ensure_ascii=False)
+    with _connect() as conn:
+        conn.execute(
+            "INSERT INTO budget_data (session_id, data) VALUES (?, ?) "
+            "ON CONFLICT(session_id) DO UPDATE SET data = excluded.data",
+            (session_id, data_json),
+        )
+        conn.commit()
+
+
+def load_budget_data(session_id: str) -> dict | None:
+    """Charge le budget prévisionnel d'une session."""
+    with _connect() as conn:
+        cursor = conn.execute(
+            "SELECT data FROM budget_data WHERE session_id = ?",
+            (session_id,),
+        )
+        row = cursor.fetchone()
+    if row is None:
+        return None
+    return json.loads(row[0])
 
 
 # =====================================================

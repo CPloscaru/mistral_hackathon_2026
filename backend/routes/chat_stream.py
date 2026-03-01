@@ -58,16 +58,41 @@ def _extract_plan_json(text: str) -> dict | None:
         except json.JSONDecodeError:
             pass
 
-    # 3. JSON brut (premier { ... dernier })
-    match = re.search(r"(\{.*\})", text, re.DOTALL)
-    if match:
-        try:
-            data = json.loads(match.group(1))
-            # Valider que ça ressemble à un plan
-            if "objectif_smart" in data or "phases" in data:
-                return data
-        except json.JSONDecodeError:
-            pass
+    # 3. JSON brut — compteur d'accolades pour trouver le premier objet complet
+    start = 0
+    while True:
+        idx = text.find("{", start)
+        if idx == -1:
+            break
+        depth = 0
+        in_string = False
+        escape = False
+        for i in range(idx, len(text)):
+            ch = text[i]
+            if escape:
+                escape = False
+                continue
+            if ch == "\\":
+                escape = True
+                continue
+            if ch == '"' and not escape:
+                in_string = not in_string
+                continue
+            if in_string:
+                continue
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    try:
+                        data = json.loads(text[idx:i + 1])
+                        if isinstance(data, dict) and ("objectif_smart" in data or "phases" in data):
+                            return data
+                    except json.JSONDecodeError:
+                        pass
+                    break
+        start = idx + 1
 
     return None
 
@@ -84,15 +109,40 @@ async def _stream_swarm(swarm, message: str, session: dict):
 
     session_id = session["session_id"]
     token_count = 0
+    agent_trace = []  # trace ordered list of agent activations
+    ui_events = []  # A2UI — accumulateur partagé via invocation_state
 
     full_text = ""
+    current_node = None  # track which agent is currently streaming
+    profiler_text = ""   # only profiler output (for clean persistence)
 
-    async for event in swarm.stream_async(message):
+    async for event in swarm.stream_async(
+        message,
+        invocation_state={
+            "session_id": session_id,
+            "ui_events": ui_events,
+        },
+    ):
         event_type = event.get("type")
 
         if event_type == "multiagent_node_start":
             node_id = event.get("node_id", "?")
-            logger.info("▶️ Swarm node started: %s", node_id)
+            current_node = node_id
+            agent_trace.append(node_id)
+            logger.info("▶️ [TRACE] Agent démarré: %s (trace: %s)", node_id, " → ".join(agent_trace))
+
+        elif event_type == "multiagent_handoff":
+            from_nodes = event.get("from_node_ids", [])
+            to_nodes = event.get("to_node_ids", [])
+            msg = event.get("message", "")
+            logger.info("🔀 [HANDOFF] %s → %s | message: %s",
+                        ", ".join(from_nodes) if from_nodes else "?",
+                        ", ".join(to_nodes) if to_nodes else "?",
+                        msg[:100] if msg else "non spécifié")
+
+        elif event_type == "multiagent_node_stop":
+            node_id = event.get("node_id", "?")
+            logger.info("⏹️ [TRACE] Agent terminé: %s", node_id)
 
         elif event_type == "multiagent_node_stream":
             inner = event.get("event", {})
@@ -103,14 +153,25 @@ async def _stream_swarm(swarm, message: str, session: dict):
 
             token_count += 1
             full_text += raw_data
+            if current_node == "profiler":
+                profiler_text += raw_data
 
-            # Ne pas streamer les tokens — on attend le résultat complet pour extraire plan_json
-            # On émet juste un heartbeat pour que le client sache que ça travaille
-            if token_count % 50 == 0:
-                yield {"data": json.dumps({"tokens": token_count}), "event": "progress"}
+            is_day_to_day = session.get("maturity_level", 1) >= 2
+
+            if is_day_to_day:
+                # Day-to-day: stream tokens en temps réel
+                yield {"data": raw_data, "event": "token"}
+            else:
+                # Onboarding: on attend le résultat complet pour extraire plan_json
+                if token_count % 50 == 0:
+                    yield {"data": json.dumps({"tokens": token_count}), "event": "progress"}
 
         elif event_type == "multiagent_result":
             has_sentinel = ONBOARDING_SENTINEL in full_text
+            logger.info(
+                "🗺️ [TRACE] Parcours complet: %s",
+                " → ".join(agent_trace) if agent_trace else "aucun agent tracé",
+            )
             logger.info(
                 "📊 Swarm DONE — %d tokens, %d chars, sentinel=%s, last 100: ...%s",
                 token_count, len(full_text), has_sentinel,
@@ -120,23 +181,31 @@ async def _stream_swarm(swarm, message: str, session: dict):
             # Extraire le plan JSON structuré
             plan_data = _extract_plan_json(full_text)
 
-            # Bump maturity si sentinel détecté (une seule fois : 1→2)
+            # Bump maturity si sentinel détecté OU plan produit (une seule fois : 1→2)
             current_level = session["maturity_level"]
-            if has_sentinel and current_level == 1:
+            if (has_sentinel or plan_data) and current_level == 1:
                 new_level = 2
                 session_manager.update_session_state(
                     session_id=session_id,
                     maturity_level=new_level,
                 )
-                logger.info("ONBOARDING_COMPLETE detected, maturity %d→%d", current_level, new_level)
+                logger.info("Maturity bump %d→%d (sentinel=%s, plan=%s)", current_level, new_level, has_sentinel, bool(plan_data))
 
                 yield {
                     "data": json.dumps({"level": new_level}, ensure_ascii=False),
                     "event": "maturity_update",
                 }
 
-            # Persister la réponse (nettoyée)
-            clean_full = full_text.replace(ONBOARDING_SENTINEL, "").strip()
+                # Swap vers day-to-day swarm après le plan
+                from backend.agents.factory import create_swarm
+                day_to_day = create_swarm(session["persona"], session.get("seed_data", {}))
+                session["agent"] = day_to_day
+                logger.info("Swapped to day-to-day swarm after plan")
+
+            # Persister la réponse (nettoyée — uniquement le texte du profiler en onboarding)
+            is_onboarding = session.get("maturity_level", 1) < 2 or (has_sentinel or plan_data)
+            persist_text = profiler_text if (is_onboarding and profiler_text) else full_text
+            clean_full = persist_text.replace(ONBOARDING_SENTINEL, "").strip()
             clean_full = re.sub(
                 r"<plan_json>.*?</plan_json>", "", clean_full, flags=re.DOTALL
             ).strip()
@@ -160,22 +229,93 @@ async def _stream_swarm(swarm, message: str, session: dict):
                     if tools_data.get("calendar_events"):
                         db.save_calendar_events(session_id, tools_data["calendar_events"])
                         logger.info("Persisted %d calendar events", len(tools_data["calendar_events"]))
+                    if tools_data.get("budget_data"):
+                        db.save_budget_data(session_id, tools_data["budget_data"])
+                        logger.info("Persisted budget_data")
 
                 yield {
                     "data": json.dumps(plan_data, ensure_ascii=False),
                     "event": "plan_ready",
                 }
+
+                # A2UI fallback — si l'agent n'a émis aucun ui_event, activation auto (3 composants seulement)
+                if not ui_events:
+                    logger.warning("A2UI fallback: agent n'a pas appelé manage_ui_component, activation auto")
+                    fallback_components = [
+                        {"action": "activate", "type": "admin", "id": "admin-1",
+                         "title": "Checklist Administrative", "icon": "\U0001f4cb"},
+                        {"action": "activate", "type": "crm", "id": "crm-1",
+                         "title": "Clients & Facturation", "icon": "\U0001f4bc"},
+                        {"action": "activate", "type": "roadmap", "id": "roadmap-1",
+                         "title": "Roadmap du Plan", "icon": "\U0001f5fa\ufe0f",
+                         "data": {"phases": plan_data.get("phases", []),
+                                  "objectif_smart": plan_data.get("objectif_smart", "")}},
+                    ]
+                    ui_events.extend(fallback_components)
+
+                # A2UI — émettre les ui_component events (agent ou fallback)
+                for comp in ui_events:
+                    yield {"data": json.dumps(comp, ensure_ascii=False), "event": "ui_component"}
+                    logger.info("A2UI event: %s %s", comp.get("action"), comp.get("type"))
+
+                # Calculer l'état final des active_components
+                current_components = list(session.get("active_components", []))
+                for evt in ui_events:
+                    if evt["action"] == "activate":
+                        current_components = [c for c in current_components if c["type"] != evt["type"]]
+                        current_components.append(evt)
+                    elif evt["action"] == "update":
+                        for c in current_components:
+                            if c["type"] == evt["type"]:
+                                if evt.get("data"):
+                                    c["data"] = evt["data"]
+                                if evt.get("title"):
+                                    c["title"] = evt["title"]
+                                break
+                    elif evt["action"] == "deactivate":
+                        current_components = [c for c in current_components if c["type"] != evt["type"]]
+
+                session_manager.update_session_state(
+                    session_id=session_id,
+                    active_components=current_components,
+                )
             else:
-                # Fallback : pas de JSON structuré, streamer le texte brut
-                logger.warning("Pas de <plan_json> trouvé, fallback texte brut")
-                if clean_full:
-                    yield {"data": clean_full, "event": "token"}
+                is_day_to_day = session.get("maturity_level", 1) >= 2
+                if not is_day_to_day:
+                    # Onboarding fallback: pas de JSON structuré, streamer le texte brut
+                    logger.warning("Pas de <plan_json> trouvé, fallback texte brut")
+                    if clean_full:
+                        yield {"data": clean_full, "event": "token"}
+
+                # Day-to-day: emit ui_component events if any
+                if ui_events:
+                    for comp in ui_events:
+                        yield {"data": json.dumps(comp, ensure_ascii=False), "event": "ui_component"}
+                        logger.info("A2UI event (day-to-day): %s %s", comp.get("action"), comp.get("type"))
+                    # Persist active_components
+                    current_components = list(session.get("active_components", []))
+                    for evt in ui_events:
+                        if evt["action"] == "activate":
+                            current_components = [c for c in current_components if c["type"] != evt["type"]]
+                            current_components.append(evt)
+                        elif evt["action"] == "update":
+                            for c in current_components:
+                                if c["type"] == evt["type"]:
+                                    if evt.get("data"):
+                                        c["data"] = evt["data"]
+                                    break
+                        elif evt["action"] == "deactivate":
+                            current_components = [c for c in current_components if c["type"] != evt["type"]]
+                    session_manager.update_session_state(
+                        session_id=session_id,
+                        active_components=current_components,
+                    )
 
             yield {
                 "data": json.dumps(
                     {
                         "done": True,
-                        "active_widgets": session.get("active_widgets", []),
+                        "active_components": session.get("active_components", []),
                     },
                     ensure_ascii=False,
                 ),
@@ -200,7 +340,7 @@ async def _event_generator(session: dict, message: str):
     Événements émis :
     - event: token       — fragment de texte généré par l'agent
     - event: maturity_update — transition de maturité détectée
-    - event: done        — fin du flux, inclut active_widgets
+    - event: done        — fin du flux, inclut active_components
     - event: error       — erreur durant le streaming
     """
     agent_or_swarm = session["agent"]
@@ -225,7 +365,8 @@ async def _event_generator(session: dict, message: str):
                 from datetime import date
                 profile_data = dict(session["onboarding_data"])
                 profile_data["date_du_jour"] = date.today().isoformat()
-                profile_msg = json.dumps(profile_data, ensure_ascii=False)
+                profile_json_str = json.dumps(profile_data, ensure_ascii=False)
+                profile_msg = f"<profile_json>\n{profile_json_str}\n</profile_json>"
                 async for sse_event in _stream_swarm(swarm, profile_msg, session):
                     yield sse_event
                 return
@@ -326,7 +467,7 @@ async def _event_generator(session: dict, message: str):
                         "data": json.dumps(
                             {
                                 "done": True,
-                                "active_widgets": session.get("active_widgets", []),
+                                "active_components": session.get("active_components", []),
                             },
                             ensure_ascii=False,
                         ),
@@ -393,6 +534,7 @@ async def session_info(request: Request, session_id: str):
         "persona": record.get("persona"),
         "maturity_level": record.get("maturity_level"),
         "plan": plan_data,
+        "active_components": record.get("active_components", []),
     }
 
 

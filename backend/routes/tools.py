@@ -43,6 +43,44 @@ async def get_calendar(session_id: str):
     return {"events": events}
 
 
+# ─── Budget ───
+
+@router.get("/budget")
+async def get_budget(session_id: str):
+    """Retourne les données budget d'une session (table dédiée, fallback onboarding_data._plan)."""
+    # 1. Table dédiée (source de vérité)
+    budget_data = db.load_budget_data(session_id)
+    if budget_data:
+        return {"budget_data": budget_data}
+
+    # 2. Fallback : ancien chemin dans onboarding_data._plan
+    record = db.load_session(session_id)
+    if record is None:
+        return {"error": "Session introuvable"}
+    onboarding_data = record.get("onboarding_data") or {}
+    plan = onboarding_data.get("_plan") or {}
+    tools_data = plan.get("tools_data") or {}
+    return {"budget_data": tools_data.get("budget_data")}
+
+
+# ─── Roadmap ───
+
+@router.get("/roadmap")
+async def get_roadmap(session_id: str):
+    """Retourne les données roadmap d'une session (phases + objectif SMART)."""
+    record = db.load_session(session_id)
+    if record is None:
+        return {"error": "Session introuvable"}
+    onboarding_data = record.get("onboarding_data") or {}
+    plan = onboarding_data.get("_plan") or {}
+    return {
+        "phases": plan.get("phases", []),
+        "objectif_smart": plan.get("objectif_smart", ""),
+        "synthese_profil": plan.get("synthese_profil", ""),
+        "prochaines_etapes": plan.get("prochaines_etapes", []),
+    }
+
+
 # ─── CRM (Clients & Factures) ───
 
 @router.get("/crm")

@@ -8,7 +8,7 @@ Phase 2 : Swarm one-shot (profiler + recherche + expert_fr) — lancé une seule
 """
 import logging
 
-from strands import Agent
+from strands import Agent, tool
 from strands.models.mistral import MistralModel
 from strands.multiagent import Swarm
 from strands.agent.conversation_manager import SlidingWindowConversationManager
@@ -23,11 +23,13 @@ from backend.config import (
 )
 from backend.agents.prompts import (
     ONBOARDING_CONVERSATION_PROMPT,
+    ONBOARDING_COORDINATOR_SWARM_PROMPT,
     ONBOARDING_PROFILER_PROMPT,
     ONBOARDING_RECHERCHE_PROMPT,
     ONBOARDING_EXPERT_FR_PROMPT,
 )
 from backend.tools.web_search import web_search
+from backend.tools.ui_components import manage_ui_component
 
 
 def create_onboarding_agent() -> Agent:
@@ -65,57 +67,75 @@ def _swarm_debug_callback(**kwargs):
 
 def create_onboarding_swarm() -> Swarm:
     """
-    Swarm one-shot pour le traitement final de l'onboarding.
+    Swarm onboarding avec coordinator (Mistral Large) comme cerveau.
 
     Architecture :
-    - Profiler (8B) : entry point, analyse le profil JSON et produit un plan SMART
-    - Recherche (14B + web_search) : recherche web temps réel via Brave Search
-    - Expert FR (8B) : base de connaissances entrepreneuriat français
+    - Coordinator (Mistral Large) : entry point, analyse le profil, appelle
+      ask_recherche / ask_expert_fr (agents éphémères via tool closures),
+      synthétise puis handoff vers profiler.
+    - Profiler (14B) : reçoit profil + synthèse, produit le plan JSON SMART,
+      active les composants UI, émet [ONBOARDING_COMPLETE].
 
-    Le profiler est l'entry point (pas de coordinator — la conversation est déjà faite).
+    Les agents recherche et expert_fr sont créés à la volée dans les tools,
+    ils ne font PAS partie du Swarm.
     """
+
+    # --- Tools éphémères (closures capturant MISTRAL_API) ---
+
+    @tool
+    def ask_recherche(question: str) -> str:
+        """Recherche web d'infos à jour pour un entrepreneur français.
+        Args:
+            question: Question précise de recherche, en français.
+        """
+        agent = Agent(
+            model=MistralModel(model_id=MODEL_14B, api_key=MISTRAL_API, max_tokens=4096),
+            system_prompt=ONBOARDING_RECHERCHE_PROMPT,
+            tools=[web_search],
+            callback_handler=_swarm_debug_callback,
+        )
+        result = agent(question)
+        return str(result)
+
+    @tool
+    def ask_expert_fr(question: str) -> str:
+        """Consulte la base de connaissances entrepreneuriat français.
+        Args:
+            question: Question sur statuts, URSSAF, ACRE, obligations.
+        """
+        agent = Agent(
+            model=MistralModel(model_id=MODEL_8B, api_key=MISTRAL_API, max_tokens=4096),
+            system_prompt=ONBOARDING_EXPERT_FR_PROMPT,
+            callback_handler=_swarm_debug_callback,
+        )
+        result = agent(question)
+        return str(result)
+
+    # --- Swarm : coordinator + profiler ---
+
+    coordinator = Agent(
+        name="coordinator",
+        description="Analyse le profil utilisateur et coordonne la recherche",
+        model=MistralModel(model_id=COORDINATOR_MODEL, api_key=MISTRAL_API, max_tokens=8192),
+        system_prompt=ONBOARDING_COORDINATOR_SWARM_PROMPT,
+        tools=[ask_recherche, ask_expert_fr],
+        callback_handler=_swarm_debug_callback,
+        conversation_manager=SlidingWindowConversationManager(window_size=40),
+    )
+
     profiler = Agent(
         name="profiler",
-        model=MistralModel(
-            model_id=MODEL_14B,
-            api_key=MISTRAL_API,
-            max_tokens=8192,
-        ),
+        description="Produit le plan JSON structuré avec objectif SMART et active les composants UI",
+        model=MistralModel(model_id=MODEL_14B, api_key=MISTRAL_API, max_tokens=8192),
         system_prompt=ONBOARDING_PROFILER_PROMPT,
+        tools=[manage_ui_component],
         callback_handler=_swarm_debug_callback,
         conversation_manager=SlidingWindowConversationManager(window_size=40),
     )
 
-    recherche = Agent(
-        name="recherche",
-        model=MistralModel(
-            model_id=MODEL_14B,
-            api_key=MISTRAL_API,
-            max_tokens=4096,
-        ),
-        system_prompt=ONBOARDING_RECHERCHE_PROMPT,
-        tools=[web_search],
-        callback_handler=_swarm_debug_callback,
-        conversation_manager=SlidingWindowConversationManager(window_size=40),
-    )
-
-    expert_fr = Agent(
-        name="expert_fr",
-        model=MistralModel(
-            model_id=MODEL_8B,
-            api_key=MISTRAL_API,
-            max_tokens=4096,
-        ),
-        system_prompt=ONBOARDING_EXPERT_FR_PROMPT,
-        callback_handler=_swarm_debug_callback,
-        conversation_manager=SlidingWindowConversationManager(window_size=40),
-    )
-
-    swarm = Swarm(
-        [profiler, recherche, expert_fr],
-        entry_point=profiler,
+    return Swarm(
+        [coordinator, profiler],
+        entry_point=coordinator,
         max_handoffs=10,
         execution_timeout=120.0,
     )
-
-    return swarm

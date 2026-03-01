@@ -103,7 +103,7 @@ class SessionManager:
                     "seed_data": seed_data,
                     "agent": agent,
                     "maturity_level": db_record["maturity_level"],
-                    "active_widgets": [],
+                    "active_components": db_record.get("active_components", []),
                     "assistant_name": db_record["assistant_name"],
                     "onboarding_data": db_record.get("onboarding_data", {}),
                 }
@@ -119,7 +119,7 @@ class SessionManager:
             "seed_data": seed_data,
             "agent": agent,
             "maturity_level": 1,
-            "active_widgets": [],
+            "active_components": [],
             "assistant_name": None,
         }
 
@@ -154,6 +154,7 @@ class SessionManager:
         maturity_level: int | None = None,
         onboarding_data: dict | None = None,
         plan_data: dict | None = None,
+        active_components: list | None = None,
     ) -> None:
         """
         Met à jour l'état d'une session en mémoire ET persiste en SQLite.
@@ -164,6 +165,7 @@ class SessionManager:
             maturity_level: Nouveau niveau de maturité (None = pas de changement)
             onboarding_data: Nouvelles données d'onboarding (None = pas de changement)
             plan_data: Données du plan SMART structuré (None = pas de changement)
+            active_components: Composants UI actifs (None = pas de changement)
         """
         session = self._sessions.get(session_id)
         if session is None:
@@ -181,6 +183,8 @@ class SessionManager:
             ob = session.get("onboarding_data") or {}
             ob["_plan"] = plan_data
             session["onboarding_data"] = ob
+        if active_components is not None:
+            session["active_components"] = active_components
 
         # Persistance SQLite
         db.save_session(
@@ -189,6 +193,7 @@ class SessionManager:
             assistant_name=session.get("assistant_name"),
             maturity_level=session["maturity_level"],
             onboarding_data=session.get("onboarding_data", {}),
+            active_components=session.get("active_components", []),
         )
 
     def swap_to_swarm(self, session_id: str) -> dict:
