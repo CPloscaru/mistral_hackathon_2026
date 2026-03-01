@@ -1,5 +1,6 @@
 .env
 .playwright/
+.playwright-cli/
 .doc/
 .tmp/
 venv/
@@ -8,3 +9,7 @@ __pycache__/
 *.pyo
 .pytest_cache/
 
+logs/
+output/
+
+*.db

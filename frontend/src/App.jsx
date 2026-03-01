@@ -1,21 +1,21 @@
 /**
- * App - Root component with subdomain-aware persona routing
+ * App - Root component avec routing onboarding → personal assistant
  *
  * Routes:
- * - / → ChatView (onboarding conversation)
- * - /personal-assistant → PersonalAssistant (spinner + SMART plan)
+ * - / → WelcomePage
+ * - /chat → ChatView (onboarding conversation)
+ * - /personal-assistant → PersonalAssistant (stepper + chat + dock)
  */
 
 import { useEffect, useRef } from 'react'
 import { Routes, Route, useNavigate } from 'react-router-dom'
-import { useSubdomain } from './hooks/useSubdomain'
 import { useSession } from './hooks/useSession'
 import { useChat } from './hooks/useChat'
 import ChatView from './components/ChatView'
 import PersonalAssistant from './components/PersonalAssistant'
+import WelcomePage from './components/WelcomePage'
 
-function OnboardingPage({ personaConfig, sessionId, chat }) {
-  const { persona } = personaConfig
+function OnboardingPage({ sessionId, chat }) {
   const { maturityLevel, initChat, loadHistory } = chat
   const navigate = useNavigate()
   const initCalledRef = useRef(false)
@@ -28,7 +28,7 @@ function OnboardingPage({ personaConfig, sessionId, chat }) {
 
     async function bootstrap() {
       const hasHistory = await loadHistory(sessionId)
-      if (!hasHistory && persona === 'creator' && maturityLevel === 1) {
+      if (!hasHistory && maturityLevel === 1) {
         initChat(sessionId)
       }
     }
@@ -36,35 +36,30 @@ function OnboardingPage({ personaConfig, sessionId, chat }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId])
 
-  // Pass navigate to chat hook for redirect on ready_for_plan
-  useEffect(() => {
-    chat.setOnReadyForPlan(() => {
-      navigate(`/personal-assistant?session_id=${sessionId}`)
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId])
-
   return (
     <ChatView
-      personaConfig={personaConfig}
       sessionId={sessionId}
       chat={chat}
+      onGoToAssistant={() => navigate('/personal-assistant')}
     />
   )
 }
 
 function App() {
-  const personaConfig = useSubdomain()
-  const { sessionId } = useSession()
+  const { sessionId, loading } = useSession()
   const chat = useChat()
+
+  if (loading) {
+    return null
+  }
 
   return (
     <Routes>
+      <Route path="/" element={<WelcomePage />} />
       <Route
-        path="/"
+        path="/chat"
         element={
           <OnboardingPage
-            personaConfig={personaConfig}
             sessionId={sessionId}
             chat={chat}
           />
@@ -73,10 +68,7 @@ function App() {
       <Route
         path="/personal-assistant"
         element={
-          <PersonalAssistant
-            personaConfig={personaConfig}
-            sessionId={sessionId}
-          />
+          <PersonalAssistant />
         }
       />
     </Routes>

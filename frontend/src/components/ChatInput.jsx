@@ -8,10 +8,18 @@
  * - Enter key submits; input clears after send
  */
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 
 function ChatInput({ onSend, disabled }) {
   const [text, setText] = useState('')
+  const textareaRef = useRef(null)
+
+  useEffect(() => {
+    const ta = textareaRef.current
+    if (!ta) return
+    ta.style.height = 'auto'
+    ta.style.height = Math.min(ta.scrollHeight, 120) + 'px'
+  }, [text])
 
   function handleSend() {
     const trimmed = text.trim()
@@ -45,8 +53,9 @@ function ChatInput({ onSend, disabled }) {
 
       {/* Text input */}
       <textarea
+        ref={textareaRef}
         className="chat-input-bar__field"
-        rows={1}
+        rows={2}
         placeholder="Message…"
         value={text}
         onChange={(e) => setText(e.target.value)}

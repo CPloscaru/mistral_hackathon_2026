@@ -1,9 +1,9 @@
 """
-Test automatisé — Phase 2 de l'onboarding (Swarm one-shot plan SMART).
+Test automatisé — Phase 2 de l'onboarding (workflow séquentiel).
 
 Lit le profil JSON du dernier run 01_first_step_onboarding, snapshot la DB,
 injecte les données d'onboarding dans une nouvelle session, ouvre
-/personal-assistant et attend le plan_ready structuré.
+/personal-assistant et attend le stepper + l'interface finale.
 
 Usage:
     source venv/bin/activate
@@ -65,77 +65,66 @@ def pw_eval(js: str) -> str:
     return ""
 
 
-def wait_for_plan_display(timeout: int = 180) -> str:
+def wait_for_interface(timeout: int = 240) -> bool:
     """
-    Poll le DOM : attend que l'objectif SMART s'affiche dans .smart-display__objectif
-    (après le spinner + typewriter).
+    Poll le DOM : attend que le stepper finisse et que l'interface (dock + chat) s'affiche.
+    Retourne True si l'interface est prête, False en cas de timeout.
     """
     start = time.time()
-    time.sleep(5)  # Au moins 3s de spinner + marge
+    time.sleep(3)  # Laisser le temps au stepper de démarrer
 
     while time.time() - start < timeout:
-        # Vérifier si on est encore en phase spinner
-        has_spinner = pw_eval(
-            "!!document.querySelector('.spinner-overlay')"
+        # Vérifier si le stepper est encore visible
+        has_stepper = pw_eval(
+            "!!document.querySelector('.stepper-overlay')"
         )
-        if has_spinner == "true":
-            time.sleep(2)
+        if has_stepper == "true":
+            # Log l'étape en cours
+            current_step = pw_eval(
+                "document.querySelector('.stepper__step--in_progress .stepper__step-label')?.textContent || ''"
+            )
+            done_steps = pw_eval(
+                "document.querySelectorAll('.stepper__step--done').length"
+            )
+            print(f"  Stepper: {done_steps}/3 terminées — en cours: {current_step}")
+            time.sleep(3)
             continue
 
-        # Vérifier si l'objectif est affiché
-        objectif = pw_eval(
-            "document.querySelector('.smart-display__objectif')?.textContent || ''"
-        ).strip()
+        # Vérifier si le dock est visible (= interface prête)
+        has_dock = pw_eval(
+            "!!document.querySelector('.dock')"
+        )
+        if has_dock == "true":
+            return True
 
-        if objectif and len(objectif) > 10:
-            return objectif
+        # Vérifier si on est en phase ready (chat visible)
+        has_chat = pw_eval(
+            "!!document.querySelector('.personal-assistant__chat')"
+        )
+        if has_chat == "true":
+            return True
 
         time.sleep(2)
 
-    return "[TIMEOUT]"
+    return False
 
 
-def get_plan_json_from_dom() -> dict | None:
-    """
-    Tente de récupérer les données du plan depuis le DOM.
-    Lit les phases et prochaines étapes depuis les éléments affichés.
-    """
+def get_welcome_message() -> str:
+    """Récupère le premier message assistant dans le chat."""
+    return pw_eval(
+        "document.querySelector('.personal-assistant__msg--assistant')?.textContent || ''"
+    ).strip()
+
+
+def get_dock_tools() -> list[str]:
+    """Récupère la liste des outils dans le dock."""
+    raw = pw_eval(
+        "JSON.stringify([...document.querySelectorAll('.dock__item')].map(el => el.querySelector('.dock__label')?.textContent || ''))"
+    )
     try:
-        # Lire l'objectif
-        objectif = pw_eval(
-            "document.querySelector('.smart-display__objectif')?.textContent || ''"
-        ).strip()
-
-        # Lire les phases
-        phases_json = pw_eval(
-            "[...document.querySelectorAll('.smart-display__phase')].map(p => ({"
-            "titre: p.querySelector('.smart-display__phase-title')?.textContent || '',"
-            "objectif: p.querySelector('.smart-display__phase-objectif')?.textContent || '',"
-            "actions: [...p.querySelectorAll('.smart-display__phase-actions li')].map(a => a.textContent)"
-            "}))"
-        )
-
-        # Lire les prochaines étapes
-        etapes_json = pw_eval(
-            "[...document.querySelectorAll('.smart-display__etapes li')].map(e => e.textContent)"
-        )
-
-        plan = {"objectif_smart": objectif}
-
-        try:
-            plan["phases"] = json.loads(phases_json)
-        except (json.JSONDecodeError, TypeError):
-            plan["phases"] = []
-
-        try:
-            plan["prochaines_etapes"] = json.loads(etapes_json)
-        except (json.JSONDecodeError, TypeError):
-            plan["prochaines_etapes"] = []
-
-        return plan if objectif else None
-    except Exception as e:
-        print(f"  ERREUR lecture DOM: {e}")
-        return None
+        return json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return []
 
 
 # ─── DB helpers ────────────────────────────────────────────────────
@@ -144,13 +133,11 @@ def get_plan_json_from_dom() -> dict | None:
 def find_latest_profile() -> dict | None:
     """
     Cherche le profil JSON le plus récent dans output/01_first_step_onboarding/.
-    Retourne le dict si trouvé, sinon None.
     """
     base = PROJECT_ROOT / "output" / "01_first_step_onboarding"
     if not base.exists():
         return None
 
-    # Trier les sous-dossiers par timestamp (nom du dossier = timestamp)
     subdirs = sorted([d for d in base.iterdir() if d.is_dir()], reverse=True)
     for subdir in subdirs:
         profile_path = subdir / "profile.json"
@@ -198,6 +185,45 @@ def check_maturity_level(session_id: str) -> int | None:
         return None
 
 
+def get_objectifs_from_db() -> list[dict]:
+    """Lit les objectifs persistés en DB."""
+    if not DB_PATH.exists():
+        return []
+    try:
+        conn = sqlite3.connect(str(DB_PATH), timeout=5)
+        cursor = conn.execute(
+            "SELECT id, rang, objectif, urgence, impact, tool_type, raison, statut "
+            "FROM objectifs ORDER BY rang"
+        )
+        rows = cursor.fetchall()
+        conn.close()
+        return [
+            {
+                "id": r[0], "rang": r[1], "objectif": r[2], "urgence": r[3],
+                "impact": r[4], "tool_type": r[5], "raison": r[6], "statut": r[7],
+            }
+            for r in rows
+        ]
+    except Exception:
+        return []
+
+
+def load_active_session_from_db() -> str | None:
+    """Retourne le session_id de la dernière session en DB."""
+    if not DB_PATH.exists():
+        return None
+    try:
+        conn = sqlite3.connect(str(DB_PATH), timeout=5)
+        cursor = conn.execute(
+            "SELECT session_id FROM sessions ORDER BY rowid DESC LIMIT 1"
+        )
+        row = cursor.fetchone()
+        conn.close()
+        return row[0] if row else None
+    except Exception:
+        return None
+
+
 def get_session_state(session_id: str) -> dict:
     """Lit l'état complet de la session depuis SQLite."""
     if not DB_PATH.exists():
@@ -205,7 +231,7 @@ def get_session_state(session_id: str) -> dict:
     try:
         conn = sqlite3.connect(str(DB_PATH), timeout=5)
         cursor = conn.execute(
-            "SELECT session_id, persona, maturity_level, onboarding_data, assistant_name "
+            "SELECT session_id, persona, maturity_level, onboarding_data, assistant_name, active_components "
             "FROM sessions WHERE session_id = ?",
             (session_id,),
         )
@@ -218,6 +244,7 @@ def get_session_state(session_id: str) -> dict:
                 "maturity_level": row[2],
                 "onboarding_data": json.loads(row[3]) if row[3] else {},
                 "assistant_name": row[4],
+                "active_components": json.loads(row[5]) if row[5] else [],
             }
     except Exception:
         pass
@@ -229,8 +256,8 @@ def get_session_state(session_id: str) -> dict:
 
 def run():
     print("=" * 60)
-    print(" ONBOARDING SOPHIE — Phase 2 (Swarm one-shot plan SMART)")
-    print(" → /personal-assistant avec spinner + objectif SMART")
+    print(" ONBOARDING MARC — Phase 2 (Workflow séquentiel)")
+    print(" → /personal-assistant avec stepper + chat + dock")
     print("=" * 60)
 
     # 1. Trouver le profil du dernier run 01
@@ -250,69 +277,101 @@ def run():
     RUN_DIR.mkdir(parents=True, exist_ok=True)
     print(f"\n3. Run dir: {RUN_DIR}")
 
-    # 4. Créer la session en DB avec le profil d'onboarding pré-injecté
-    import uuid
-    session_id = str(uuid.uuid4())
-    print(f"\n4. Pré-création de la session en DB...")
-    conn = sqlite3.connect(str(DB_PATH), timeout=5)
-    conn.execute(
-        "INSERT OR REPLACE INTO sessions "
-        "(session_id, persona, assistant_name, maturity_level, onboarding_data) "
-        "VALUES (?, ?, ?, ?, ?)",
-        (session_id, "creator", "Andy", 1, json.dumps(profile, ensure_ascii=False)),
-    )
-    conn.commit()
-    conn.close()
-    print(f"  session_id: {session_id}")
-    print(f"  onboarding_data pré-injecté ({len(json.dumps(profile))} chars)")
-
-    # 5. Ouvrir le navigateur directement sur /personal-assistant
-    print("\n5. Ouverture du navigateur sur /personal-assistant...")
-    url = f"http://sophie.localhost:5173/personal-assistant?session_id={session_id}"
-    pw(f"open {url} --browser chrome --headed")
-
-    # 6. Attendre l'affichage de l'objectif SMART (après spinner + typewriter)
-    print("\n6. Attente de l'objectif SMART (spinner ≥ 3s + typewriter — jusqu'à 180s)...")
-    objectif_text = wait_for_plan_display(timeout=180)
-
-    if objectif_text == "[TIMEOUT]":
-        print("  ERREUR: Timeout en attente de l'objectif SMART")
+    # 4. Vérifier si le navigateur est déjà sur /personal-assistant
+    #    (enchaînement automatique depuis script 01)
+    current_path = pw_eval("window.location.pathname")
+    if "/personal-assistant" in current_path:
+        # Browser déjà sur la bonne page — lire session depuis DB
+        session_id = load_active_session_from_db()
+        if not session_id:
+            print("ERREUR: aucune session active trouvée en DB")
+            sys.exit(1)
+        print(f"\n4. Navigateur déjà sur /personal-assistant — réutilisation de la session")
+        print(f"  session_id: {session_id}")
     else:
-        print(f"\n  Objectif reçu ({len(objectif_text)} chars):")
-        print(f"  \"{objectif_text[:200]}{'...' if len(objectif_text) > 200 else ''}\"")
+        # Mode standalone — créer une nouvelle session et naviguer
+        import uuid
+        session_id = str(uuid.uuid4())
+        print(f"\n4. Pré-création de la session en DB...")
+        conn = sqlite3.connect(str(DB_PATH), timeout=5)
+        conn.execute(
+            "INSERT OR REPLACE INTO sessions "
+            "(session_id, persona, assistant_name, maturity_level, onboarding_data) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (session_id, "default", None, 1, json.dumps(profile, ensure_ascii=False)),
+        )
+        conn.commit()
+        conn.close()
+        print(f"  session_id: {session_id}")
+        print(f"  onboarding_data pré-injecté ({len(json.dumps(profile))} chars)")
 
-    # 7. Récupérer le plan structuré depuis le DOM
-    print("\n7. Extraction du plan structuré depuis le DOM...")
-    plan_data = get_plan_json_from_dom()
-    if plan_data:
-        print(f"  Plan extrait: {len(plan_data.get('phases', []))} phases, "
-              f"{len(plan_data.get('prochaines_etapes', []))} étapes")
+        # Ouvrir le navigateur directement sur /personal-assistant
+        print("\n5. Ouverture du navigateur sur /personal-assistant...")
+        url = "http://localhost:5173/personal-assistant"
+        pw(f"goto {url}")
+
+    # Attendre le stepper + l'interface
+    print("\nAttente du workflow (stepper → interface — jusqu'à 240s)...")
+    interface_ready = wait_for_interface(timeout=240)
+
+    if not interface_ready:
+        print("  ERREUR: Timeout en attente de l'interface")
     else:
-        print("  AVERTISSEMENT: plan structuré non trouvable dans le DOM")
+        print("  Interface prête !")
 
-    # 8. Vérifier le maturity_level en DB
-    print("\n8. Vérification du maturity_level...")
+    # Récupérer le message de bienvenue
+    print("\nMessage de bienvenue...")
+    welcome = get_welcome_message()
+    if welcome:
+        print(f"  \"{welcome[:200]}{'...' if len(welcome) > 200 else ''}\"")
+    else:
+        print("  AVERTISSEMENT: pas de message de bienvenue trouvé")
+
+    # Récupérer les outils du dock
+    print("\nOutils dans le dock...")
+    tools = get_dock_tools()
+    for t in tools:
+        print(f"  - {t}")
+    if not tools:
+        print("  AVERTISSEMENT: aucun outil dans le dock")
+
+    # Vérifier les objectifs en DB
+    print("\nObjectifs en DB...")
+    objectifs = get_objectifs_from_db()
+    for obj in objectifs:
+        print(f"  #{obj['rang']}  {obj['objectif']}")
+        print(f"       {obj['tool_type'] or '-'} | {obj['urgence']} | {obj['statut']}")
+    if not objectifs:
+        print("  AVERTISSEMENT: aucun objectif en DB")
+
+    # Vérifier le maturity_level en DB
+    print("\nVérification du maturity_level...")
     maturity = check_maturity_level(session_id)
     if maturity == 2:
         print(f"  OK: maturity_level = {maturity} (transition 1→2 réussie)")
     else:
         print(f"  AVERTISSEMENT: maturity_level = {maturity} (attendu: 2)")
 
-    # 9. Sauvegarder les résultats
-    print("\n9. Sauvegarde des résultats...")
+    # Sauvegarder les résultats
+    print("\nSauvegarde des résultats...")
 
-    # Plan structuré JSON
-    if plan_data:
-        plan_path = RUN_DIR / "plan.json"
-        with open(plan_path, "w", encoding="utf-8") as f:
-            json.dump(plan_data, f, ensure_ascii=False, indent=2)
-        print(f"  Plan JSON: {plan_path}")
+    if objectifs:
+        objectifs_path = RUN_DIR / "objectifs.json"
+        with open(objectifs_path, "w", encoding="utf-8") as f:
+            json.dump(objectifs, f, ensure_ascii=False, indent=2)
+        print(f"  Objectifs: {objectifs_path}")
 
-    # Plan texte (objectif seul)
-    plan_txt_path = RUN_DIR / "plan.txt"
-    with open(plan_txt_path, "w", encoding="utf-8") as f:
-        f.write(objectif_text)
-    print(f"  Plan texte: {plan_txt_path}")
+    if welcome:
+        welcome_path = RUN_DIR / "welcome_message.txt"
+        with open(welcome_path, "w", encoding="utf-8") as f:
+            f.write(welcome)
+        print(f"  Welcome: {welcome_path}")
+
+    if tools:
+        tools_path = RUN_DIR / "dock_tools.json"
+        with open(tools_path, "w", encoding="utf-8") as f:
+            json.dump(tools, f, ensure_ascii=False, indent=2)
+        print(f"  Dock tools: {tools_path}")
 
     profile_path = RUN_DIR / "profile_input.json"
     with open(profile_path, "w", encoding="utf-8") as f:
@@ -325,26 +384,30 @@ def run():
         json.dump(session_state, f, ensure_ascii=False, indent=2)
     print(f"  État session: {state_path}")
 
-    # 10. Restaurer le snapshot DB (pour pouvoir relancer)
-    print("\n10. Restauration du snapshot DB...")
-    restore_db()
+    # Ne PAS restaurer le snapshot : on laisse la DB en l'état post-workflow
+    # pour que l'interface reste fonctionnelle (objectifs, maturity_level=2, etc.)
+    # Utiliser --restore-only pour restaurer manuellement si besoin.
+    print("\nSnapshot DB conservé (pas de restauration automatique)")
+    print(f"  Pour restaurer : python scripts/02_second_step_plan.py --restore-only")
 
     print(f"\n{'=' * 60}")
     print(f" Run terminé: {RUN_DIR}")
     print(f" maturity_level final: {maturity}")
-    print(f" Plan structuré: {'OK' if plan_data else 'NON'}")
+    print(f" Objectifs: {len(objectifs)}")
+    print(f" Dock tools: {len(tools)}")
+    print(f" Interface: {'OK' if interface_ready else 'TIMEOUT'}")
     print("=" * 60)
     print("Navigateur ouvert pour inspection.")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Phase 2 onboarding — Swarm one-shot plan SMART"
+        description="Phase 2 onboarding — Workflow séquentiel"
     )
     parser.add_argument(
         "--restore-only",
         action="store_true",
-        help="Restaure uniquement le snapshot DB sans relancer le Swarm",
+        help="Restaure uniquement le snapshot DB sans relancer le workflow",
     )
     args = parser.parse_args()
 

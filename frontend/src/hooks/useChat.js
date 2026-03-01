@@ -148,12 +148,10 @@ export function useChat() {
   const [isStreaming, setIsStreaming] = useState(false)
   const [maturityLevel, setMaturityLevel] = useState(1)
   const [assistantName, setAssistantName] = useState(null)
+  const [readyForPlan, setReadyForPlan] = useState(false)
 
   // Ref to hold the current sessionId for use inside SSE callbacks
   const sessionIdRef = useRef(null)
-
-  // Callback ref for ready_for_plan redirect (set by App.jsx)
-  const onReadyForPlanRedirectRef = useRef(null)
 
   /**
    * Shared SSE response handler
@@ -204,9 +202,8 @@ export function useChat() {
         )
         setIsStreaming(false)
       },
-      // onReadyForPlan — profil collecté, redirige vers /personal-assistant
+      // onReadyForPlan — profil collecté, afficher bouton de transition
       (_profile) => {
-        // Marquer l'Agent comme terminé
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === assistantMsgId
@@ -215,13 +212,7 @@ export function useChat() {
           )
         )
         setIsStreaming(false)
-
-        // Rediriger vers /personal-assistant (le Swarm sera lancé là-bas)
-        if (onReadyForPlanRedirectRef.current) {
-          setTimeout(() => {
-            onReadyForPlanRedirectRef.current()
-          }, 500)
-        }
+        setReadyForPlan(true)
       }
     )
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -379,13 +370,6 @@ export function useChat() {
     }
   }, [])
 
-  /**
-   * setOnReadyForPlan — Register a callback for onboarding → personal-assistant redirect
-   */
-  const setOnReadyForPlan = useCallback((fn) => {
-    onReadyForPlanRedirectRef.current = fn
-  }, [])
-
   return {
     messages,
     isStreaming,
@@ -395,6 +379,6 @@ export function useChat() {
     sendMessage,
     initChat,
     loadHistory,
-    setOnReadyForPlan,
+    readyForPlan,
   }
 }

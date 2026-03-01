@@ -318,6 +318,38 @@ body {
   transform: scale(0.92);
 }
 
+/* ---- Ready for plan banner ---- */
+.chat-ready-banner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 16px;
+  animation: fadeIn 0.3s ease forwards;
+}
+
+.chat-ready-banner p {
+  font-size: 15px;
+  color: #8E8E93;
+}
+
+.chat-ready-btn {
+  padding: 12px 32px;
+  border: none;
+  border-radius: 22px;
+  background: var(--blue-bubble);
+  color: white;
+  font-size: 17px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: transform 0.1s, opacity 0.2s;
+}
+
+.chat-ready-btn:active {
+  transform: scale(0.95);
+}
+
 /* ---- Dark mode support ---- */
 @media (prefers-color-scheme: dark) {
   :root {

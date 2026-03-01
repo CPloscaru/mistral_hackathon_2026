@@ -1,8 +1,9 @@
 #!/bin/bash
-# Lance backend + frontend + test Swarm plan SMART (phase 2 onboarding) en un seul script
-# Ouvre /personal-assistant avec spinner orbital + objectif SMART typewriter
+# Lance backend + frontend + test complet d'onboarding en un seul script
+# Phase 1: conversation onboarding (collecte profil Marc)
+# Phase 2: workflow séquentiel (analyse + mapping + interface)
 #
-# Usage: ./scripts/run_swarm_test.sh
+# Usage: ./scripts/run_full_onboarding.sh
 #
 # Prérequis: avoir lancé run_onboarding_test.sh au moins une fois
 #            (pour avoir un profile.json dans output/01_first_step_onboarding/)
@@ -62,7 +63,7 @@ until curl -s http://localhost:5173 > /dev/null 2>&1; do sleep 1; done
 echo "Frontend OK"
 echo ""
 
-# Lancer le test Swarm (→ /personal-assistant avec spinner + plan SMART)
+# Lancer le test workflow (→ /personal-assistant avec stepper + chat + dock)
 python scripts/02_second_step_plan.py
 
 # Le cleanup se fait via le trap

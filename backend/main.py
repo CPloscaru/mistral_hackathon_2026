@@ -1,21 +1,42 @@
 """
 Point d'entrée de l'application Kameleon.
-Lance le serveur FastAPI avec les routes et middlewares configurés.
+Lance le serveur FastAPI avec les routes configurées.
 """
 import logging
+import logging.handlers
+from pathlib import Path
 import uvicorn
 
-logging.basicConfig(level=logging.INFO)
-logging.getLogger("kameleon.swarm").setLevel(logging.INFO)
+# --- Logging : stdout + fichier rotatif dans logs/ ---
+_log_dir = Path(__file__).resolve().parent.parent / "logs"
+_log_dir.mkdir(exist_ok=True)
+
+_fmt = logging.Formatter(
+    "%(asctime)s | %(name)-22s | %(levelname)-5s | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+
+_console = logging.StreamHandler()
+_console.setFormatter(_fmt)
+
+_file = logging.handlers.RotatingFileHandler(
+    _log_dir / "kameleon.log",
+    maxBytes=5 * 1024 * 1024,  # 5 Mo
+    backupCount=3,
+    encoding="utf-8",
+)
+_file.setFormatter(_fmt)
+
+logging.basicConfig(level=logging.INFO, handlers=[_console, _file])
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("strands").setLevel(logging.WARNING)
-logging.getLogger("kameleon.swarm").setLevel(logging.INFO)
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.middleware.subdomain import SubdomainMiddleware
-from backend.routes.chat import router as chat_router
 from backend.routes.chat_stream import router as stream_router
+from backend.routes.chat_init import router as init_router
+from backend.routes.chat_onboarding import router as onboarding_router
+from backend.routes.chat_common import router as common_router
 from backend.routes.tools import router as tools_router
 
 app = FastAPI(
@@ -35,26 +56,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Résolution de la persona depuis le sous-domaine Host
-app.add_middleware(SubdomainMiddleware)
-
 # --- Routes ---
 
-app.include_router(chat_router)
 app.include_router(stream_router)
+app.include_router(init_router)
+app.include_router(onboarding_router)
+app.include_router(common_router)
 app.include_router(tools_router)
 
 
 @app.get("/health")
-async def health_check(request: Request):
-    """
-    Endpoint de santé — vérifie que l'API est opérationnelle.
-    Retourne également la persona résolue depuis le sous-domaine.
-    """
+async def health_check():
+    """Endpoint de santé."""
     return {
         "status": "ok",
         "service": "kameleon",
-        "persona": request.state.persona,
     }
 
 

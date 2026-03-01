@@ -1,19 +1,13 @@
 /**
- * ToolPanel - Full-screen overlay panel that opens left of the dock
+ * ToolPanel - Full-screen overlay panel that opens above the dock
  *
  * Generic container that renders the selected tool component with
- * slide-in animation and a close button.
+ * slide-in animation and a close button. Title comes from the A2UI registry.
  */
 
 import { useState, useEffect } from 'react'
 
-const TOOL_TITLES = {
-  admin: 'Checklist Administrative',
-  calendar: 'Calendrier des Actions',
-  crm: 'Clients & Facturation',
-}
-
-function ToolPanel({ tool, onClose, children }) {
+function ToolPanel({ tool, title, onClose, children }) {
   const [closing, setClosing] = useState(false)
 
   useEffect(() => {
@@ -31,7 +25,7 @@ function ToolPanel({ tool, onClose, children }) {
     <div className={`tool-panel-overlay ${closing ? 'tool-panel-overlay--closing' : ''}`}>
       <div className="tool-panel">
         <div className="tool-panel__header">
-          <h2 className="tool-panel__title">{TOOL_TITLES[tool] || tool}</h2>
+          <h2 className="tool-panel__title">{title || tool}</h2>
           <button className="tool-panel__close" onClick={handleClose} aria-label="Fermer">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <line x1="3" y1="3" x2="13" y2="13" />

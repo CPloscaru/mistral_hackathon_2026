@@ -1,21 +1,15 @@
 /**
- * Dock - macOS-style vertical dock fixed to the right side
+ * Dock - macOS-style horizontal dock fixed to the bottom
  *
  * Slides in after the SMART objective typewriter completes.
- * 3 tool icons with staggered animation, hover scale, and active glow.
+ * Dynamically renders tool icons from the `tools` prop (A2UI pattern).
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 
-const TOOLS = [
-  { id: 'admin', icon: '\uD83D\uDCCB', label: 'Administratif', tooltip: 'Checklist administrative' },
-  { id: 'calendar', icon: '\uD83D\uDCC5', label: 'Calendrier', tooltip: 'Calendrier des actions' },
-  { id: 'crm', icon: '\uD83D\uDCBC', label: 'Clients', tooltip: 'Clients & Facturation' },
-]
-
 const STAGGER_DELAY = 200 // ms between each icon appearing
 
-function Dock({ visible, activeTool, onSelectTool }) {
+function Dock({ visible, tools = [], activeTool, bouncingTool, onSelectTool }) {
   const [visibleItems, setVisibleItems] = useState([])
   const roRef = useRef(null)
 
@@ -37,27 +31,27 @@ function Dock({ visible, activeTool, onSelectTool }) {
   }, [])
 
   useEffect(() => {
-    if (!visible) {
+    if (!visible || tools.length === 0) {
       setVisibleItems([])
       return
     }
 
     // Stagger the icons appearing one by one
-    TOOLS.forEach((tool, i) => {
+    tools.forEach((tool, i) => {
       setTimeout(() => {
         setVisibleItems(prev => [...prev, tool.id])
       }, i * STAGGER_DELAY)
     })
-  }, [visible])
+  }, [visible, tools])
 
-  if (!visible) return null
+  if (!visible || tools.length === 0) return null
 
   return (
     <div className="dock" ref={dockRef}>
-      {TOOLS.map(tool => (
+      {tools.map(tool => (
         <div
           key={tool.id}
-          className={`dock__item ${visibleItems.includes(tool.id) ? 'dock__item--visible' : ''} ${activeTool === tool.id ? 'dock__item--active' : ''}`}
+          className={`dock__item ${visibleItems.includes(tool.id) ? 'dock__item--visible' : ''} ${activeTool === tool.id ? 'dock__item--active' : ''} ${bouncingTool === tool.id ? 'dock__item--bouncing' : ''}`}
           data-tooltip={tool.tooltip}
           onClick={() => onSelectTool(activeTool === tool.id ? null : tool.id)}
         >

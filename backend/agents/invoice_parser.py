@@ -6,9 +6,8 @@ import json
 import logging
 
 from strands import Agent
-from strands.models.mistral import MistralModel
 
-from backend.config import MODEL_8B, MISTRAL_API
+from backend.config import MODEL_8B, make_model
 
 logger = logging.getLogger("kameleon.invoice_parser")
 
@@ -69,11 +68,7 @@ def parse_invoices(raw_json: str) -> dict:
     Returns:
         Dict avec "clients" et "factures" normalisés
     """
-    model = MistralModel(
-        model_id=MODEL_8B,
-        api_key=MISTRAL_API,
-        max_tokens=4096,
-    )
+    model = make_model(MODEL_8B, max_tokens=4096)
 
     agent = Agent(
         model=model,

@@ -1,9 +1,10 @@
 /**
  * CRMTool - Clients & Facturation with drag-and-drop JSON import
  *
- * Drop zone for JSON files → POST /tools/crm/import (agent parsing)
+ * Drop zone for JSON files -> POST /tools/crm/import (agent parsing)
  * Client cards + factures table with colored statut badges
  * Stats: total CA, factures en attente, taux de recouvrement
+ * Relance column + modal for sending reminders
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
@@ -28,13 +29,20 @@ function CRMTool({ sessionId }) {
   const fileInputRef = useRef(null)
   const dropzoneRef = useRef(null)
 
+  // Relances state
+  const [relances, setRelances] = useState([])
+  const [relanceModal, setRelanceModal] = useState(null) // facture object or null
+
   useEffect(() => {
     if (!sessionId) return
-    fetch(`${buildBackendUrl()}/tools/crm?session_id=${sessionId}`)
-      .then(r => r.json())
-      .then(data => {
-        setClients(data.clients || [])
-        setFactures(data.factures || [])
+    Promise.all([
+      fetch(`${buildBackendUrl()}/tools/crm?session_id=${sessionId}`).then(r => r.json()),
+      fetch(`${buildBackendUrl()}/tools/crm/relances?session_id=${sessionId}`).then(r => r.json()),
+    ])
+      .then(([crmData, relancesData]) => {
+        setClients(crmData.clients || [])
+        setFactures(crmData.factures || [])
+        setRelances(relancesData.relances || [])
         setLoading(false)
       })
       .catch(() => setLoading(false))
@@ -123,6 +131,44 @@ function CRMTool({ sessionId }) {
     }
   }
 
+  // Relance helpers
+  function getRelanceStatus(factureId) {
+    const factureRelances = relances.filter(r => r.facture_id === factureId)
+    if (factureRelances.length === 0) return 'none'
+    if (factureRelances.some(r => r.statut === 'envoyee')) return 'envoyee'
+    if (factureRelances.some(r => r.statut === 'brouillon')) return 'brouillon'
+    return 'none'
+  }
+
+  async function handleSendRelance(relanceId) {
+    try {
+      const res = await fetch(`${buildBackendUrl()}/tools/crm/relances/${relanceId}/send`, {
+        method: 'POST',
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setRelances(prev => prev.map(r => r.id === relanceId ? { ...r, statut: 'envoyee', date_envoi: data.relance?.date_envoi } : r))
+        setRelanceModal(null)
+      }
+    } catch (e) {
+      console.error('Send relance failed:', e)
+    }
+  }
+
+  async function handleDeleteRelance(relanceId) {
+    try {
+      const res = await fetch(`${buildBackendUrl()}/tools/crm/relances/${relanceId}`, {
+        method: 'DELETE',
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setRelances(prev => prev.filter(r => r.id !== relanceId))
+      }
+    } catch (e) {
+      console.error('Delete relance failed:', e)
+    }
+  }
+
   if (loading) {
     return <div className="crm-tool__empty">Chargement...</div>
   }
@@ -138,7 +184,7 @@ function CRMTool({ sessionId }) {
 
   // Map client_id to client name
   const clientMap = {}
-  clients.forEach(c => { clientMap[c.id] = c.nom })
+  clients.forEach(c => { clientMap[c.id] = c })
 
   // Count factures per client
   const facturesPerClient = {}
@@ -147,6 +193,11 @@ function CRMTool({ sessionId }) {
       facturesPerClient[f.client_id] = (facturesPerClient[f.client_id] || 0) + 1
     }
   })
+
+  // Modal facture relances
+  const modalRelances = relanceModal
+    ? relances.filter(r => r.facture_id === relanceModal.id)
+    : []
 
   return (
     <div>
@@ -224,6 +275,7 @@ function CRMTool({ sessionId }) {
       {factures.length > 0 && (
         <>
           <h3 className="crm-tool__section-title">Factures ({factures.length})</h3>
+          <div className="crm-tool__factures-wrapper">
           <table className="crm-tool__factures-table">
             <thead>
               <tr>
@@ -233,31 +285,116 @@ function CRMTool({ sessionId }) {
                 <th>Émission</th>
                 <th>Échéance</th>
                 <th>Statut</th>
+                <th>Relance</th>
               </tr>
             </thead>
             <tbody>
-              {factures.map(f => (
-                <tr key={f.id}>
-                  <td>{f.numero}</td>
-                  <td>{clientMap[f.client_id] || '—'}</td>
-                  <td>{(f.montant || 0).toLocaleString('fr-FR')} {f.devise || '€'}</td>
-                  <td>{f.date_emission || '—'}</td>
-                  <td>{f.date_echeance || '—'}</td>
-                  <td>
-                    <span className={`crm-tool__badge crm-tool__badge--${f.statut}`}>
-                      {STATUT_LABELS[f.statut] || f.statut}
-                    </span>
-                  </td>
-                </tr>
-              ))}
+              {factures.map(f => {
+                const relStatus = getRelanceStatus(f.id)
+                const isPaid = f.statut === 'payee'
+                return (
+                  <tr key={f.id}>
+                    <td>{f.numero}</td>
+                    <td>{clientMap[f.client_id]?.nom || '—'}</td>
+                    <td>{(f.montant || 0).toLocaleString('fr-FR')} {f.devise || '€'}</td>
+                    <td>{f.date_emission || '—'}</td>
+                    <td>{f.date_echeance || '—'}</td>
+                    <td>
+                      <span className={`crm-tool__badge crm-tool__badge--${f.statut}`}>
+                        {STATUT_LABELS[f.statut] || f.statut}
+                      </span>
+                    </td>
+                    <td>
+                      {isPaid ? (
+                        <span className="crm-tool__relance-na">N/A</span>
+                      ) : (
+                        <button
+                          className={`crm-tool__relance-btn crm-tool__relance-btn--${relStatus}`}
+                          onClick={() => setRelanceModal(f)}
+                          title={
+                            relStatus === 'envoyee' ? 'Relance envoyée' :
+                            relStatus === 'brouillon' ? 'Brouillon de relance' :
+                            'Aucune relance'
+                          }
+                        >
+                          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <path d="M2 3h12v10H2V3zm0 0l6 5 6-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
+          </div>
         </>
       )}
 
       {clients.length === 0 && factures.length === 0 && !importing && (
         <div className="crm-tool__empty">
           Aucun client ni facture pour le moment. Dépose un fichier JSON pour commencer.
+        </div>
+      )}
+
+      {/* Relance Modal */}
+      {relanceModal && (
+        <div className="crm-tool__modal-overlay" onClick={() => setRelanceModal(null)}>
+          <div className="crm-tool__modal" onClick={e => e.stopPropagation()}>
+            <div className="crm-tool__modal-header">
+              <h3>Relance — {relanceModal.numero} / {clientMap[relanceModal.client_id]?.nom || 'Client'}</h3>
+              <button className="crm-tool__modal-close" onClick={() => setRelanceModal(null)}>×</button>
+            </div>
+            <div className="crm-tool__modal-body">
+              {modalRelances.length === 0 ? (
+                <p className="crm-tool__modal-empty">
+                  Aucune relance pour cette facture. Demande à Marc de générer une relance dans le chat.
+                </p>
+              ) : (
+                modalRelances.map(rel => (
+                  <div key={rel.id} className="crm-tool__relance-card">
+                    <div className="crm-tool__relance-meta">
+                      <span className={`crm-tool__badge crm-tool__badge--relance-${rel.statut}`}>
+                        {rel.statut === 'envoyee' ? 'Envoyée' : rel.statut === 'brouillon' ? 'Brouillon' : rel.statut}
+                      </span>
+                      <span className="crm-tool__relance-date">
+                        {rel.date_envoi ? `Envoyée le ${rel.date_envoi}` : `Créée le ${rel.date_creation}`}
+                      </span>
+                    </div>
+                    <div className="crm-tool__relance-field">
+                      <label>Destinataire</label>
+                      <div>{clientMap[rel.client_id]?.email || '—'}</div>
+                    </div>
+                    <div className="crm-tool__relance-field">
+                      <label>Objet</label>
+                      <div>{rel.objet}</div>
+                    </div>
+                    <div className="crm-tool__relance-field">
+                      <label>Corps</label>
+                      <div className="crm-tool__relance-corps">{rel.corps}</div>
+                    </div>
+                    {rel.statut === 'brouillon' && (
+                      <div className="crm-tool__relance-actions">
+                        <button
+                          className="crm-tool__relance-send-btn"
+                          onClick={() => handleSendRelance(rel.id)}
+                        >
+                          Envoyer
+                        </button>
+                        <button
+                          className="crm-tool__relance-delete-btn"
+                          onClick={() => handleDeleteRelance(rel.id)}
+                        >
+                          Supprimer
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

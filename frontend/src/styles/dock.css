@@ -47,6 +47,23 @@
   box-shadow: 0 0 20px rgba(124, 58, 237, 0.3);
 }
 
+.dock__item--bouncing {
+  animation: dockBounce 0.6s cubic-bezier(0.28, 0.84, 0.42, 1) infinite;
+}
+
+.dock__item--bouncing .dock__icon {
+  background: rgba(124, 58, 237, 0.25);
+  border-color: #7C3AED;
+  box-shadow: 0 0 16px rgba(124, 58, 237, 0.5);
+}
+
+@keyframes dockBounce {
+  0%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-14px); }
+  50% { transform: translateY(-4px); }
+  70% { transform: translateY(-8px); }
+}
+
 .dock__icon {
   width: 52px;
   height: 52px;
@@ -754,27 +771,38 @@
 }
 
 /* Factures table */
+.crm-tool__factures-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .crm-tool__factures-table {
   width: 100%;
   border-collapse: collapse;
+  min-width: 500px;
 }
 
 .crm-tool__factures-table th {
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 600;
   color: #64748b;
   text-align: left;
-  padding: 0.6rem 0.75rem;
+  padding: 0.45rem 0.5rem;
   border-bottom: 1px solid rgba(124, 58, 237, 0.1);
   text-transform: uppercase;
   letter-spacing: 0.03em;
+  white-space: nowrap;
 }
 
 .crm-tool__factures-table td {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: #cbd5e1;
-  padding: 0.6rem 0.75rem;
+  padding: 0.45rem 0.5rem;
   border-bottom: 1px solid rgba(124, 58, 237, 0.05);
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .crm-tool__factures-table tr:hover td {
@@ -808,6 +836,1033 @@
 
 /* Empty state */
 .crm-tool__empty {
+  text-align: center;
+  padding: 2rem;
+  color: #475569;
+  font-size: 0.85rem;
+}
+
+/* Relance column */
+
+.crm-tool__relance-na {
+  color: #475569;
+  font-size: 0.75rem;
+}
+
+.crm-tool__relance-btn {
+  background: none;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 4px 8px;
+  cursor: pointer;
+  color: #64748b;
+  transition: all 0.2s;
+}
+
+.crm-tool__relance-btn:hover {
+  border-color: #6366f1;
+  color: #a5b4fc;
+}
+
+.crm-tool__relance-btn--envoyee {
+  color: #4ade80;
+  border-color: rgba(74, 222, 128, 0.3);
+}
+
+.crm-tool__relance-btn--brouillon {
+  color: #fb923c;
+  border-color: rgba(251, 146, 60, 0.3);
+}
+
+.crm-tool__relance-btn--none {
+  color: #64748b;
+}
+
+/* Relance Modal */
+
+.crm-tool__modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.crm-tool__modal {
+  background: #1e1b2e;
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 12px;
+  width: 90%;
+  max-width: 520px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.crm-tool__modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.crm-tool__modal-header h3 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  margin: 0;
+}
+
+.crm-tool__modal-close {
+  background: none;
+  border: none;
+  color: #64748b;
+  font-size: 1.5rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.crm-tool__modal-close:hover {
+  color: #e2e8f0;
+}
+
+.crm-tool__modal-body {
+  padding: 1.25rem;
+}
+
+.crm-tool__modal-empty {
+  color: #64748b;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.crm-tool__relance-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.crm-tool__relance-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.crm-tool__relance-date {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.crm-tool__badge--relance-brouillon {
+  background: rgba(251, 146, 60, 0.15);
+  color: #fb923c;
+}
+
+.crm-tool__badge--relance-envoyee {
+  background: rgba(74, 222, 128, 0.15);
+  color: #4ade80;
+}
+
+.crm-tool__relance-field {
+  margin-bottom: 0.5rem;
+}
+
+.crm-tool__relance-field label {
+  display: block;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  margin-bottom: 0.25rem;
+}
+
+.crm-tool__relance-field div {
+  font-size: 0.85rem;
+  color: #cbd5e1;
+}
+
+.crm-tool__relance-corps {
+  white-space: pre-wrap;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 0.75rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.crm-tool__relance-send-btn {
+  margin-top: 0.75rem;
+  padding: 0.5rem 1.25rem;
+  border-radius: 8px;
+  border: none;
+  background: #6366f1;
+  color: white;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.crm-tool__relance-send-btn:hover {
+  background: #4f46e5;
+}
+
+.crm-tool__relance-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.crm-tool__relance-actions .crm-tool__relance-send-btn {
+  margin-top: 0;
+}
+
+.crm-tool__relance-delete-btn {
+  padding: 0.5rem 1.25rem;
+  border-radius: 8px;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  background: transparent;
+  color: #ef4444;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.crm-tool__relance-delete-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+}
+
+/* ─── Budget Tool ─── */
+
+.budget-tool {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.budget-tool__section-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #e2e0f0;
+  margin-top: 1.25rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid rgba(124, 58, 237, 0.1);
+}
+
+.budget-tool__section-title:first-child {
+  margin-top: 0;
+}
+
+.budget-tool__charges {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.budget-tool__charge-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 1rem;
+  background: rgba(124, 58, 237, 0.04);
+  border-radius: 8px;
+  border-left: 3px solid rgba(124, 58, 237, 0.2);
+  transition: all 0.2s ease;
+}
+
+.budget-tool__charge-row:hover {
+  background: rgba(124, 58, 237, 0.08);
+  border-left-color: #7C3AED;
+}
+
+.budget-tool__charge-info {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.budget-tool__charge-label {
+  font-size: 0.9rem;
+  color: #e2e0f0;
+}
+
+.budget-tool__badge {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 20px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.budget-tool__badge--obligatoire {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+.budget-tool__badge--recommande {
+  background: rgba(251, 146, 60, 0.15);
+  color: #fb923c;
+}
+
+.budget-tool__charge-montant {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #a78bfa;
+  white-space: nowrap;
+}
+
+.budget-tool__charge-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  margin-top: 0.25rem;
+  background: rgba(124, 58, 237, 0.08);
+  border-radius: 8px;
+  border: 1px solid rgba(124, 58, 237, 0.15);
+  font-size: 0.95rem;
+  color: #e2e0f0;
+  font-weight: 600;
+}
+
+.budget-tool__charge-total-value {
+  color: #c4b5fd;
+  font-size: 1.1rem;
+}
+
+/* Revenus cards */
+.budget-tool__revenus {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+.budget-tool__card {
+  background: rgba(124, 58, 237, 0.06);
+  border: 1px solid rgba(124, 58, 237, 0.12);
+  border-radius: 12px;
+  padding: 1.25rem 1rem;
+  text-align: center;
+  transition: all 0.2s ease;
+}
+
+.budget-tool__card:hover {
+  border-color: rgba(124, 58, 237, 0.3);
+  background: rgba(124, 58, 237, 0.1);
+}
+
+.budget-tool__card-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #a78bfa;
+  margin-bottom: 0.3rem;
+}
+
+.budget-tool__card-label {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+/* Seuil de rentabilité */
+.budget-tool__seuil {
+  padding: 1rem;
+  background: rgba(124, 58, 237, 0.04);
+  border-radius: 10px;
+  border: 1px solid rgba(124, 58, 237, 0.1);
+}
+
+.budget-tool__seuil-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  color: #94a3b8;
+  margin-bottom: 0.6rem;
+}
+
+.budget-tool__seuil-bar {
+  width: 100%;
+  height: 10px;
+  background: rgba(124, 58, 237, 0.1);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.budget-tool__seuil-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #7C3AED, #a78bfa);
+  border-radius: 5px;
+  transition: width 0.6s ease;
+}
+
+.budget-tool__seuil-info {
+  margin-top: 0.6rem;
+  font-size: 0.8rem;
+  color: #94a3b8;
+  text-align: center;
+}
+
+.budget-tool__seuil-info strong {
+  color: #a78bfa;
+}
+
+.budget-tool__loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 2rem;
+  color: #94a3b8;
+  font-size: 0.9rem;
+}
+
+.budget-tool__spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(124, 58, 237, 0.2);
+  border-top-color: #7C3AED;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.budget-tool__empty {
+  text-align: center;
+  padding: 2rem;
+  color: #475569;
+  font-size: 0.85rem;
+}
+
+/* ─── Roadmap Tool ─── */
+
+.roadmap-tool {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.roadmap-tool__banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.1), rgba(124, 58, 237, 0.04));
+  border: 1px solid rgba(124, 58, 237, 0.2);
+  border-radius: 12px;
+}
+
+.roadmap-tool__banner-icon {
+  font-size: 1.4rem;
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+
+.roadmap-tool__banner-text {
+  font-size: 0.95rem;
+  color: #c4b5fd;
+  line-height: 1.5;
+  font-weight: 500;
+  margin: 0;
+}
+
+/* Timeline */
+.roadmap-tool__timeline {
+  display: flex;
+  flex-direction: column;
+  padding-left: 0.5rem;
+}
+
+.roadmap-tool__node {
+  display: flex;
+  gap: 1.25rem;
+  position: relative;
+}
+
+.roadmap-tool__node-line {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  width: 24px;
+}
+
+.roadmap-tool__node-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 3px solid rgba(100, 116, 139, 0.4);
+  background: rgba(15, 15, 20, 0.8);
+  transition: all 0.3s ease;
+  z-index: 1;
+}
+
+.roadmap-tool__node-connector {
+  width: 2px;
+  flex: 1;
+  background: rgba(100, 116, 139, 0.2);
+  min-height: 20px;
+}
+
+.roadmap-tool__node-content {
+  flex: 1;
+  padding-bottom: 1.5rem;
+}
+
+.roadmap-tool__node-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #e2e0f0;
+  margin: 0 0 0.3rem;
+}
+
+.roadmap-tool__node-objectif {
+  font-size: 0.85rem;
+  color: #94a3b8;
+  margin: 0 0 0.6rem;
+  line-height: 1.4;
+}
+
+.roadmap-tool__node-actions {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.roadmap-tool__action {
+  font-size: 0.8rem;
+  color: #cbd5e1;
+  padding: 0.35rem 0.6rem;
+  background: rgba(124, 58, 237, 0.04);
+  border-radius: 6px;
+  border-left: 2px solid rgba(124, 58, 237, 0.15);
+}
+
+/* Phase states */
+.roadmap-tool__node--current .roadmap-tool__node-dot {
+  border-color: #7C3AED;
+  background: #7C3AED;
+  box-shadow: 0 0 12px rgba(124, 58, 237, 0.5);
+}
+
+.roadmap-tool__node--current .roadmap-tool__node-connector {
+  background: linear-gradient(to bottom, rgba(124, 58, 237, 0.4), rgba(100, 116, 139, 0.2));
+}
+
+.roadmap-tool__node--current .roadmap-tool__node-title {
+  color: #c4b5fd;
+}
+
+.roadmap-tool__node--current .roadmap-tool__action {
+  border-left-color: #7C3AED;
+  background: rgba(124, 58, 237, 0.08);
+}
+
+.roadmap-tool__node--past .roadmap-tool__node-dot {
+  border-color: #22c55e;
+  background: #22c55e;
+}
+
+.roadmap-tool__node--past .roadmap-tool__node-connector {
+  background: rgba(34, 197, 94, 0.3);
+}
+
+.roadmap-tool__node--past .roadmap-tool__node-title {
+  color: #86efac;
+}
+
+.roadmap-tool__node--future .roadmap-tool__node-dot {
+  border-color: rgba(100, 116, 139, 0.3);
+}
+
+.roadmap-tool__node--future .roadmap-tool__node-title {
+  color: #64748b;
+}
+
+.roadmap-tool__node--future .roadmap-tool__node-objectif {
+  color: #475569;
+}
+
+.roadmap-tool__node--future .roadmap-tool__action {
+  color: #64748b;
+  border-left-color: rgba(100, 116, 139, 0.15);
+}
+
+.roadmap-tool__loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 2rem;
+  color: #94a3b8;
+  font-size: 0.9rem;
+}
+
+.roadmap-tool__spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(124, 58, 237, 0.2);
+  border-top-color: #7C3AED;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.roadmap-tool__empty {
+  text-align: center;
+  padding: 2rem;
+  color: #475569;
+  font-size: 0.85rem;
+}
+
+/* ─── Tool Showcase ─── */
+
+.tool-showcase {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(5, 5, 10, 0.92);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  animation: showcaseFadeIn 0.5s ease forwards;
+}
+
+@keyframes showcaseFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Intro message — cinematic segment reveal */
+.tool-showcase__intro {
+  position: absolute;
+  max-width: 600px;
+  text-align: center;
+  padding: 0 2rem;
+  transition: top 0.9s cubic-bezier(0.22, 1, 0.36, 1),
+              transform 0.9s cubic-bezier(0.22, 1, 0.36, 1),
+              font-size 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.tool-showcase__intro--center {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.tool-showcase__intro--top {
+  top: 2.5rem;
+  transform: translateY(0);
+}
+
+.tool-showcase__intro--top .tool-showcase__intro-text {
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.tool-showcase__intro--top .tool-showcase__intro-segment {
+  filter: none;
+}
+
+.tool-showcase__intro-text {
+  font-size: 1.25rem;
+  color: #c4b5fd;
+  line-height: 1.8;
+  margin: 0;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+/* Each segment: blur-rise-fade reveal */
+.tool-showcase__intro-segment {
+  display: inline;
+  opacity: 0;
+  filter: blur(8px);
+  animation: segmentReveal 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes segmentReveal {
+  0% {
+    opacity: 0;
+    filter: blur(8px);
+    transform: translateY(6px);
+  }
+  60% {
+    opacity: 0.85;
+    filter: blur(2px);
+    transform: translateY(1px);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0px);
+    transform: translateY(0);
+  }
+}
+
+/* Centre — outil courant */
+.tool-showcase__center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.75rem;
+  transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.tool-showcase__center--entering {
+  opacity: 0;
+  transform: scale(0.6);
+}
+
+.tool-showcase__center--visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.tool-showcase__center--exiting {
+  opacity: 0;
+  transform: scale(0.3) translateY(40vh);
+  transition: all 0.6s cubic-bezier(0.55, 0, 1, 0.45);
+}
+
+/* Large icon au centre — réutilise .dock__icon avec override de taille */
+.tool-showcase__icon-large {
+  width: 110px !important;
+  height: 110px !important;
+  font-size: 3.5rem !important;
+  border-radius: 28px !important;
+  border-width: 2px !important;
+  border-color: rgba(124, 58, 237, 0.3) !important;
+  box-shadow:
+    0 0 40px rgba(124, 58, 237, 0.2),
+    0 0 80px rgba(124, 58, 237, 0.1);
+}
+
+.tool-showcase__title {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #e2e0f0;
+  margin: 0.5rem 0 0;
+  letter-spacing: -0.02em;
+}
+
+.tool-showcase__description {
+  font-size: 1rem;
+  color: #94a3b8;
+  max-width: 420px;
+  line-height: 1.6;
+  margin: 0;
+  opacity: 0;
+  transform: translateY(8px);
+  animation: showcaseTextIn 0.5s ease 0.3s forwards;
+}
+
+@keyframes showcaseTextIn {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Mini-dock progressif en bas — réutilise .dock__icon et .dock__label */
+.tool-showcase__dock {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 0.75rem 2.5rem;
+  background: rgba(15, 15, 20, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(124, 58, 237, 0.15);
+  border-radius: 16px 16px 0 0;
+}
+
+.tool-showcase__dock-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.75rem 1rem;
+  border-radius: 14px;
+  animation: showcaseDockLand 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes showcaseDockLand {
+  from {
+    opacity: 0;
+    transform: scale(0.5) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* ─── Objectifs Tool ─── */
+
+.objectifs-tool {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.objectifs-tool__card {
+  background: rgba(124, 58, 237, 0.04);
+  border: 1px solid rgba(124, 58, 237, 0.12);
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  transition: border-color 0.2s ease;
+}
+
+.objectifs-tool__card:hover {
+  border-color: rgba(124, 58, 237, 0.25);
+}
+
+.objectifs-tool__card-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
+}
+
+.objectifs-tool__rang {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #7C3AED;
+  background: rgba(124, 58, 237, 0.12);
+  padding: 0.15rem 0.5rem;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.objectifs-tool__titre {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #e2e0f0;
+  line-height: 1.3;
+}
+
+.objectifs-tool__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+
+.objectifs-tool__badge {
+  font-size: 0.7rem;
+  font-weight: 500;
+  padding: 0.2rem 0.6rem;
+  border-radius: 20px;
+  text-transform: capitalize;
+}
+
+.objectifs-tool__badge--high {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.objectifs-tool__badge--medium {
+  background: rgba(234, 179, 8, 0.12);
+  color: #fde68a;
+  border: 1px solid rgba(234, 179, 8, 0.25);
+}
+
+.objectifs-tool__badge--low {
+  background: rgba(34, 197, 94, 0.12);
+  color: #86efac;
+  border: 1px solid rgba(34, 197, 94, 0.25);
+}
+
+.objectifs-tool__badge--tool {
+  background: rgba(124, 58, 237, 0.12);
+  color: #c4b5fd;
+  border: 1px solid rgba(124, 58, 237, 0.25);
+}
+
+.objectifs-tool__justification {
+  font-size: 0.82rem;
+  color: #94a3b8;
+  margin: 0.3rem 0;
+  line-height: 1.5;
+}
+
+.objectifs-tool__raison {
+  font-size: 0.8rem;
+  color: #64748b;
+  margin: 0.2rem 0 0.5rem;
+  line-height: 1.4;
+}
+
+.objectifs-tool__raison strong {
+  color: #94a3b8;
+}
+
+.objectifs-tool__card-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.objectifs-tool__btn {
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.3rem 0.8rem;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  background: transparent;
+}
+
+.objectifs-tool__btn--edit {
+  color: #a78bfa;
+  border-color: rgba(124, 58, 237, 0.25);
+}
+
+.objectifs-tool__btn--edit:hover {
+  background: rgba(124, 58, 237, 0.12);
+}
+
+.objectifs-tool__btn--delete {
+  color: #f87171;
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.objectifs-tool__btn--delete:hover {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.objectifs-tool__btn--danger {
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.objectifs-tool__btn--save {
+  color: #86efac;
+  border-color: rgba(34, 197, 94, 0.3);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.objectifs-tool__btn--save:hover {
+  background: rgba(34, 197, 94, 0.15);
+}
+
+.objectifs-tool__btn--cancel {
+  color: #94a3b8;
+  border-color: rgba(100, 116, 139, 0.25);
+}
+
+.objectifs-tool__btn--cancel:hover {
+  background: rgba(100, 116, 139, 0.1);
+}
+
+.objectifs-tool__confirm-delete {
+  font-size: 0.75rem;
+  color: #f87171;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* Edit form */
+.objectifs-tool__edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.objectifs-tool__edit-label {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  font-weight: 500;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.objectifs-tool__edit-input,
+.objectifs-tool__edit-textarea,
+.objectifs-tool__edit-select {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
+  color: #e2e0f0;
+  background: rgba(15, 15, 20, 0.6);
+  border: 1px solid rgba(124, 58, 237, 0.2);
+  border-radius: 8px;
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.15s ease;
+  box-sizing: border-box;
+}
+
+.objectifs-tool__edit-input:focus,
+.objectifs-tool__edit-textarea:focus,
+.objectifs-tool__edit-select:focus {
+  border-color: rgba(124, 58, 237, 0.5);
+}
+
+.objectifs-tool__edit-textarea {
+  resize: vertical;
+  min-height: 48px;
+}
+
+.objectifs-tool__edit-selects {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.objectifs-tool__edit-selects > label {
+  flex: 1;
+}
+
+.objectifs-tool__edit-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.3rem;
+}
+
+.objectifs-tool__loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 2rem;
+  color: #94a3b8;
+  font-size: 0.9rem;
+}
+
+.objectifs-tool__spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(124, 58, 237, 0.2);
+  border-top-color: #7C3AED;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.objectifs-tool__empty {
   text-align: center;
   padding: 2rem;
   color: #475569;

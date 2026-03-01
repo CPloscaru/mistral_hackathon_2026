@@ -1,53 +1,61 @@
 /**
- * useSession - Manages session ID persistence
+ * useSession - Fetches the active session from the backend
  *
- * Priority:
- * 1. ?session_id=XXX in URL (for test scripts / deep links)
- * 2. sessionStorage (persists within the browser tab)
- * 3. New UUID v4 (first visit)
+ * Single-user app: the backend resolves the active session from DB.
+ * No more session_id in URL or sessionStorage.
  */
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
-/**
- * Build a session key scoped to the current subdomain.
- * Prevents session_id sharing between sophie/marc subdomains
- * when they share the same registrable domain (localhost).
- */
-function getSessionKey() {
-  const parts = window.location.hostname.split('.')
-  const subdomain = parts.length >= 2 ? parts[0].toLowerCase() : 'default'
-  return `kameleon_session_id_${subdomain}`
+function buildBackendUrl() {
+  const hostname = window.location.hostname
+  return `http://${hostname}:8000`
 }
 
-function getOrCreateSessionId() {
-  // 1. URL query param (highest priority)
-  const params = new URLSearchParams(window.location.search)
-  const fromUrl = params.get('session_id')
-  if (fromUrl) {
-    sessionStorage.setItem(getSessionKey(), fromUrl)
-    return fromUrl
-  }
-
-  // 2. sessionStorage (tab persistence)
-  const SESSION_KEY = getSessionKey()
-  let sessionId = sessionStorage.getItem(SESSION_KEY)
-  if (!sessionId) {
-    // 3. New UUID
-    sessionId = crypto.randomUUID()
-    sessionStorage.setItem(SESSION_KEY, sessionId)
-  }
-  return sessionId
-}
+const BACKEND_URL = buildBackendUrl()
 
 export function useSession() {
-  const [sessionId, setSessionId] = useState(() => getOrCreateSessionId())
+  const [sessionId, setSessionId] = useState(null)
+  const [loading, setLoading] = useState(true)
 
-  function resetSession() {
-    const newId = crypto.randomUUID()
-    sessionStorage.setItem(getSessionKey(), newId)
-    setSessionId(newId)
+  useEffect(() => {
+    async function fetchActiveSession(retries = 5) {
+      for (let i = 0; i < retries; i++) {
+        try {
+          const res = await fetch(`${BACKEND_URL}/session/active`)
+          if (res.ok) {
+            const data = await res.json()
+            if (data.session_id) {
+              setSessionId(data.session_id)
+              setLoading(false)
+              return
+            }
+          }
+          break // Server responded but no session — don't retry
+        } catch (e) {
+          console.warn(`Failed to fetch active session (attempt ${i + 1}/${retries}):`, e)
+          if (i < retries - 1) {
+            await new Promise(r => setTimeout(r, 1000))
+          }
+        }
+      }
+      // No session found after retries — generate one client-side
+      setSessionId(crypto.randomUUID())
+      setLoading(false)
+    }
+    fetchActiveSession()
+  }, [])
+
+  function refreshSession() {
+    setLoading(true)
+    fetch(`${BACKEND_URL}/session/active`)
+      .then(res => res.json())
+      .then(data => {
+        setSessionId(data.session_id || crypto.randomUUID())
+      })
+      .catch(e => console.warn('Failed to refresh session:', e))
+      .finally(() => setLoading(false))
   }
 
-  return { sessionId, resetSession }
+  return { sessionId, loading, refreshSession }
 }

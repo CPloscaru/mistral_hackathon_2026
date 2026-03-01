@@ -67,7 +67,13 @@ async def get_budget(session_id: str):
 
 @router.get("/roadmap")
 async def get_roadmap(session_id: str):
-    """Retourne les données roadmap d'une session (phases + objectif SMART)."""
+    """Retourne les données roadmap d'une session (DB-first, fallback onboarding_data)."""
+    # 1. Table dédiée (source de vérité)
+    roadmap = db.load_roadmap(session_id)
+    if roadmap["phases"]:
+        return roadmap
+
+    # 2. Fallback : ancien chemin dans onboarding_data._plan
     record = db.load_session(session_id)
     if record is None:
         return {"error": "Session introuvable"}
@@ -81,6 +87,15 @@ async def get_roadmap(session_id: str):
     }
 
 
+# ─── Prévisions Financières ───
+
+@router.get("/previsions")
+async def get_previsions(session_id: str):
+    """Retourne les prévisions financières d'une session."""
+    previsions = db.load_previsions(session_id)
+    return {"previsions": previsions}
+
+
 # ─── CRM (Clients & Factures) ───
 
 @router.get("/crm")
@@ -89,6 +104,92 @@ async def get_crm(session_id: str):
     data = db.load_crm_data(session_id)
     return data
 
+
+# ─── Objectifs ───
+
+@router.get("/objectifs")
+async def get_objectifs():
+    """Retourne tous les objectifs, triés par rang."""
+    objectifs = db.load_objectifs()
+    return {"objectifs": objectifs}
+
+
+class ObjectifUpdateRequest(BaseModel):
+    objectif: str | None = None
+    urgence: str | None = None
+    impact: str | None = None
+    justification: str | None = None
+    tool_type: str | None = None
+    raison: str | None = None
+    rang: int | None = None
+    statut: str | None = None
+
+
+@router.put("/objectifs/{objectif_id}")
+async def update_objectif(objectif_id: int, body: ObjectifUpdateRequest):
+    """Met à jour un objectif."""
+    fields = {k: v for k, v in body.model_dump().items() if v is not None}
+    if not fields:
+        return {"error": "Aucun champ à modifier"}
+    ok = db.update_objectif(objectif_id, **fields)
+    if not ok:
+        return {"error": f"Objectif {objectif_id} introuvable"}
+    return {"ok": True, "objectif": db.get_objectif(objectif_id)}
+
+
+@router.delete("/objectifs/{objectif_id}")
+async def delete_objectif(objectif_id: int):
+    """Supprime un objectif."""
+    ok = db.delete_objectif(objectif_id)
+    if not ok:
+        return {"error": f"Objectif {objectif_id} introuvable"}
+    return {"ok": True}
+
+
+# ─── CRM Relances ───
+
+@router.get("/crm/relances")
+async def get_relances(session_id: str, facture_id: int | None = None):
+    """Retourne les relances d'une session, optionnellement filtrées par facture."""
+    relances = db.load_relances(session_id, facture_id=facture_id)
+    return {"relances": relances}
+
+
+@router.post("/crm/relances/{relance_id}/send")
+async def send_relance(relance_id: int):
+    """Marque une relance comme envoyée."""
+    ok = db.mark_relance_sent(relance_id)
+    if not ok:
+        return {"error": f"Relance {relance_id} introuvable ou déjà envoyée"}
+    relance = db.get_relance(relance_id)
+    return {"ok": True, "relance": relance}
+
+
+@router.delete("/crm/relances/{relance_id}")
+async def delete_relance(relance_id: int):
+    """Supprime un brouillon de relance."""
+    ok = db.delete_relance(relance_id)
+    if not ok:
+        return {"error": f"Relance {relance_id} introuvable ou déjà envoyée"}
+    return {"ok": True}
+
+
+class RelanceUpdateRequest(BaseModel):
+    objet: str | None = None
+    corps: str | None = None
+
+
+@router.put("/crm/relances/{relance_id}")
+async def update_relance(relance_id: int, body: RelanceUpdateRequest):
+    """Met à jour un brouillon de relance."""
+    ok = db.update_relance(relance_id, objet=body.objet, corps=body.corps)
+    if not ok:
+        return {"error": f"Relance {relance_id} introuvable ou déjà envoyée"}
+    relance = db.get_relance(relance_id)
+    return {"ok": True, "relance": relance}
+
+
+# ─── CRM Import ───
 
 class ImportRequest(BaseModel):
     session_id: str
