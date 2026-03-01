@@ -14,7 +14,7 @@ Kameleon guides users from zero — through a conversational onboarding — to a
 | Agent SDK | [Strands Agents](https://strandsagents.com) |
 | AI | Mistral AI (API) |
 | Database | SQLite |
-| Frontend | React 19, Vite 7, React Router 7 |
+| Frontend | React 19, Vite 7, React Router DOM 7 |
 | Web search | Brave Search API |
 
 ---
@@ -23,7 +23,7 @@ Kameleon guides users from zero — through a conversational onboarding — to a
 
 ### Prerequisites
 
-- Python 3.12+ with `venv`
+- Python 3.14+ with `venv`
 - Node.js 18+
 - A Mistral API key
 
@@ -65,11 +65,37 @@ Backend runs on `http://localhost:8000`, frontend on `http://localhost:5173`.
 
 ---
 
-## Multi-Agent Architecture: "Agents as Tools"
+## Multi-Agent Architecture
 
-The core pattern is **"Agents as Tools"** from the Strands SDK: the main orchestrator owns sub-agents declared as `@tool`. Each sub-agent is a standalone Strands agent with its own model, system prompt and tools. The orchestrator decides which sub-agent to call based on the user's request.
+Kameleon uses three multi-agent patterns from the Strands Agents SDK, chosen to match the needs of each phase.
+
+### Pattern 1 — Sequential Workflow (Onboarding)
+
+Used in `onboarding_workflow.py`. Each step is an independent Strands `Agent`. The output of one step is injected as context into the next (**context passing**). All outputs are validated by Pydantic schemas before moving on.
+
+```
+Profile → [Agent: Analyst] → analysis → [Agent: Tool Mapper] → mapping → [Agent: Roadmap Builder] → roadmap → [Deterministic: UI Builder] → dock
+```
+
+This is a pure pipeline: no routing, no branching — just sequential chain with structured JSON handoff between agents.
+
+### Pattern 2 — Agents as Tools (Dashboard Orchestrator)
+
+Used in `orchestrator.py`. The main orchestrator owns sub-agents declared as `@tool`. Each sub-agent is a standalone Strands `Agent` with its own model, system prompt and tools. The orchestrator decides which sub-agent to call based on the user's intent.
+
+```
+User → [Orchestrator] → selects @tool → [Sub-agent: budget_agent] → DB operation → response
+                       → selects @tool → [Sub-agent: crm_agent] → DB operation → response
+                       → calls direct tool → [propose_choices] → HITL event
+```
 
 No Swarm, no remote A2A protocol — everything is local, synchronous, in-process.
+
+### Pattern 3 — Standalone Agents (Specialist, Financial)
+
+Used in `specialist_juridique.py` and `financial_swarm.py`. These are independent agents with their own tool sets, not embedded in the orchestrator's tool list (the financial agent is the exception — it is also declared as `@tool` on the orchestrator, but internally it creates its own agent with its own tools).
+
+The legal specialist lives in a separate chat panel with its own conversation history, completely independent from the main orchestrator.
 
 ---
 
@@ -173,28 +199,32 @@ Accessible via the "Chat" dock icon. Lives in its own panel, independent from th
 ```
 backend/
   agents/
-    orchestrator.py          # Main orchestrator (Marc)
+    orchestrator.py          # Main orchestrator — "Agents as Tools" pattern
     onboarding_chat.py       # Conversational onboarding agent
-    onboarding_workflow.py   # Sequential post-collection workflow
-    financial_swarm.py       # Financial forecasting sub-agent
-    specialist_juridique.py  # Legal specialist for freelancers
-    prompts/                 # Externalized prompts (.txt)
+    onboarding_workflow.py   # Sequential workflow — context passing pattern
+    financial_swarm.py       # Financial forecasting agent (standalone + @tool)
+    specialist_juridique.py  # Legal specialist — standalone agent
+    invoice_parser.py        # Invoice JSON normalizer (8B)
+    models.py                # Pydantic schemas (AgentResponse, PlanPhase, etc.)
+    prompts/                 # Externalized system prompts (.txt)
   models/
     magistral.py             # Magistral wrapper (filters thinking tokens)
   routes/
     chat_init.py             # GET /chat/init — first onboarding message
     chat_onboarding.py       # POST /chat/onboarding — sequential workflow
     chat_stream.py           # POST /chat/stream — main streaming endpoint
-    chat_common.py           # Session and history
-    tools.py                 # REST CRUD for all tools
+    chat_common.py           # Session and history helpers
+    tools.py                 # REST CRUD for all dashboard tools
   session/
     db.py                    # SQLite — table creation and queries
-    manager.py               # Session management
+    manager.py               # In-memory session cache
   tools/                     # Strands tools (@tool) for agents
     objectifs.py, crm.py, budget.py, admin.py,
     calendar.py, roadmap.py, previsions.py,
     profil.py, interaction.py, ui_components.py,
     web_search.py
+  middleware/
+    subdomain.py             # Subdomain routing (multi-tenant)
   config.py                  # Model constants and configuration
   main.py                    # FastAPI entry point
 
@@ -203,21 +233,37 @@ frontend/
     App.jsx                  # React routes
     components/
       WelcomePage.jsx        # Landing page
-      ChatView.jsx           # Onboarding view (chat)
+      ChatView.jsx           # Onboarding chat view
       PersonalAssistant.jsx  # Full post-onboarding dashboard
       Dock.jsx               # macOS-style dock
+      ToolPanel.jsx          # Individual tool panel container
+      Header.jsx             # Navigation header
+      ChatInput.jsx          # User input field
+      MessageBubble.jsx      # Chat message rendering
+      ToolShowcase.jsx       # Onboarding tool presentation
+      TypingIndicator.jsx    # Loading indicator
       ComponentRegistry.js   # Dynamic tool component registry
       tools/                 # Individual tool components
+        ObjectifsTool.jsx, CRMTool.jsx, BudgetTool.jsx,
+        AdminTool.jsx, CalendarTool.jsx, RoadmapTool.jsx,
+        PrevisionsTool.jsx, ChatTool.jsx
     hooks/
       useChat.js             # SSE streaming hook
       useSession.js          # Session management hook
+      useSubdomain.js        # Subdomain detection hook
     styles/                  # CSS
 
 scripts/
-  start.sh                  # Launch (normal / auto / resume)
-  01_first_step_onboarding.py  # Auto test: LLM plays the user
-  02_second_step_plan.py       # Auto test: triggers the workflow
-  seed_roadmap.py              # Roadmap data seeding
+  start.sh                   # Launch (normal / auto / resume)
+  01_first_step_onboarding.py   # Auto test: LLM plays the user
+  02_second_step_plan.py        # Auto test: triggers the workflow
+  run_full_flow_test.py         # End-to-end flow test
+  run_full_flow_test.sh         # E2E test runner script
+  run_full_onboarding.sh        # Full onboarding runner
+  run_onboarding_test.sh        # Onboarding test runner
+  test_scenario_sophie.py       # Onboarding scenario test
+  test_tools_plan.py            # Tool mapping test
+  seed_roadmap.py               # Roadmap data seeding
 ```
 
 ---
